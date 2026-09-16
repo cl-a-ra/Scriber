@@ -1,0 +1,6 @@
+{
+  "name": "Scriber",
+  "description": "Minimalist, cozy earthy-aesthetic quote generator, typography studio, and inspiration sanctuary with loc hair wisdom, 6-hour trending styles, and daily affirmations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'themeColor', 'fontChoice', 'darkMode', 'createdAt', 'updatedAt']) &&
+             data.keys().size() <= 8 &&
+             data.uid is string && data.uid == request.auth.uid &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.themeColor is string && data.themeColor.size() <= 50 &&
+             data.fontChoice is string && data.fontChoice.size() <= 50 &&
+             data.darkMode is bool &&
+             data.createdAt is string &&
+             data.updatedAt is string;
+    }
+
+    function isValidQuote(data) {
+      return data.keys().hasAll(['id', 'userId', 'authorName', 'text', 'category', 'visualStyle', 'fontFamily', 'backgroundStyle', 'accentColor', 'likesCount', 'createdAt']) &&
+             data.keys().size() <= 14 &&
+             data.id is string && isValidId(data.id) &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() <= 100 &&
+             data.text is string && data.text.size() > 0 && data.text.size() <= 1000 &&
+             data.category is string && data.category.size() <= 50 &&
+             data.visualStyle is string && data.visualStyle.size() <= 50 &&
+             data.fontFamily is string && data.fontFamily.size() <= 50 &&
+             data.backgroundStyle is string && data.backgroundStyle.size() <= 50 &&
+             data.accentColor is string && data.accentColor.size() <= 30 &&
+             data.likesCount is number && data.likesCount >= 0 &&
+             data.createdAt is string;
+    }
+
+    function isValidFeedback(data) {
+      return data.keys().hasAll(['id', 'quoteId', 'userId', 'userName', 'comment', 'createdAt']) &&
+             data.keys().size() <= 8 &&
+             data.id is string && isValidId(data.id) &&
+             data.quoteId is string && isValidId(data.quoteId) &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.userName is string && data.userName.size() <= 100 &&
+             data.comment is string && data.comment.size() > 0 && data.comment.size() <= 1000 &&
+             data.createdAt is string;
+    }
+
+    // User profile document
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId) && isValidUserProfile(incoming());
+      allow update: if isOwner(userId) && isValidUserProfile(incoming()) &&
+                    incoming().uid == existing().uid &&
+                    incoming().createdAt == existing().createdAt;
+      allow delete: if isOwner(userId);
+
+      // Personal saved collection
+      match /saved_quotes/{quoteId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidQuote(incoming()) && incoming().userId == userId;
+        allow update: if isOwner(userId) && isValidQuote(incoming()) && incoming().userId == userId;
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // Public curated & community quotes
+    match /public_quotes/{quoteId} {
+      allow get, list: if true;
+      allow create: if isSignedIn() && isValidQuote(incoming());
+      allow update: if isSignedIn() && (
+        // Allow author to update their quote
+        (existing().userId == request.auth.uid && isValidQuote(incoming())) ||
+        // Allow community members to increment/decrement like count
+        (incoming().diff(existing()).affectedKeys().hasOnly(['likesCount']) &&
+         incoming().likesCount is number &&
+         incoming().likesCount >= 0 &&
+         (incoming().likesCount == existing().likesCount + 1 || incoming().likesCount == existing().likesCount - 1))
+      );
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+
+      // Feedback & encouragement on quotes
+      match /feedbacks/{feedbackId} {
+        allow get, list: if true;
+        allow create: if isSignedIn() && isValidFeedback(incoming());
+        allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidFeedback(incoming());
+        allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+      }
+    }
+  }
+}

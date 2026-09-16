@@ -1,0 +1,124 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with theme preferences, customizable typography and dark mode settings",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string"
+        },
+        "themeColor": {
+          "type": "string"
+        },
+        "fontChoice": {
+          "type": "string"
+        },
+        "darkMode": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": ["uid", "displayName", "themeColor", "fontChoice", "darkMode", "createdAt", "updatedAt"]
+    },
+    "Quote": {
+      "title": "Quote",
+      "description": "Artistic quote with typography styling, reggae/gen-z aesthetic, and loc hair wisdom",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "authorName": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "visualStyle": {
+          "type": "string"
+        },
+        "fontFamily": {
+          "type": "string"
+        },
+        "backgroundStyle": {
+          "type": "string"
+        },
+        "accentColor": {
+          "type": "string"
+        },
+        "likesCount": {
+          "type": "number"
+        },
+        "sixHourCycle": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "userId", "authorName", "text", "category", "visualStyle", "fontFamily", "backgroundStyle", "accentColor", "likesCount", "createdAt"]
+    },
+    "QuoteFeedback": {
+      "title": "QuoteFeedback",
+      "description": "Community feedback, reflections and encouragement on quotes",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "quoteId": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "userName": {
+          "type": "string"
+        },
+        "comment": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "quoteId", "userId", "userName", "comment", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Individual user preferences and profiles"
+    },
+    "/users/{userId}/saved_quotes/{quoteId}": {
+      "schema": "Quote",
+      "description": "User's personal saved collection of favorite quotes and inspiration"
+    },
+    "/public_quotes/{quoteId}": {
+      "schema": "Quote",
+      "description": "Public trending and community quotes searchable by category like locs hair and reggae vibes"
+    },
+    "/public_quotes/{quoteId}/feedbacks/{feedbackId}": {
+      "schema": "QuoteFeedback",
+      "description": "Community feedback and appreciation notes on public quotes"
+    }
+  }
+}
