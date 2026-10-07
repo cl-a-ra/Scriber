@@ -236,3 +236,25 @@ test('default and overridden Flash models report unavailable and busy provider e
     else process.env.GEMINI_MODEL = previousModel;
   }
 });
+
+test('two trusted proxy hops count the client consistently and ignore spoofed prefixes', async () => {
+  const previousProxyHops = process.env.TRUST_PROXY_HOPS;
+  process.env.TRUST_PROXY_HOPS = '2';
+  try {
+    await withApi(async (base) => {
+      const send = (forwardedFor: string) => fetch(`${base}/generate-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': forwardedFor },
+        body: JSON.stringify(quoteInput),
+      });
+      assert.equal((await send('203.0.113.4, 198.51.100.1')).status, 200);
+      const limited = await send('192.0.2.30, 203.0.113.4, 198.51.100.2');
+      assert.equal(limited.status, 429);
+      assert.equal((await limited.json()).code, 'RATE_LIMITED');
+      assert.equal((await send('192.0.2.31, 203.0.113.6, 198.51.100.2')).status, 200);
+    }, createAIService(async () => quote), 1);
+  } finally {
+    if (previousProxyHops === undefined) delete process.env.TRUST_PROXY_HOPS;
+    else process.env.TRUST_PROXY_HOPS = previousProxyHops;
+  }
+});
