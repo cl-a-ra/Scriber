@@ -1,8 +1,9 @@
 import React from 'react';
-import { X, Check, Bell, BellRing, Sparkles, Moon, Sun, Type } from 'lucide-react';
+import { Check, Bell, BellRing, Sparkles, Moon, Sun, Type } from 'lucide-react';
 import { ThemeColorPreset, FontChoice } from '../types/quote';
 import { THEME_CONFIGS, FONT_CONFIGS, ThemeConfig } from '../lib/themeStyles';
 import { UserPreferences } from '../lib/quoteStore';
+import { BottomSheet } from './BottomSheet';
 
 interface ThemeCustomizerModalProps {
   isOpen: boolean;
@@ -26,6 +27,9 @@ export const ThemeCustomizerModal: React.FC<ThemeCustomizerModalProps> = ({
   if (!isOpen) return null;
 
   const presets: { id: ThemeColorPreset; label: string; primary: string; secondary: string; desc: string }[] = [
+    { id: 'lavender-pop', label: 'Lavender Playground', primary: '#6940b5', secondary: '#c79aec', desc: 'Lilac dreams, orchid pop, a little magic' },
+    { id: 'sunshine-club', label: 'Sunshine Club', primary: '#a64221', secondary: '#ffd16c', desc: 'Peach fizz, marigold, sunny little joys' },
+    { id: 'ocean-daydream', label: 'Ocean Daydream', primary: '#096d80', secondary: '#79d4dc', desc: 'Lagoon blues, mint skies, fresh possibilities' },
     { id: 'earthy-sage', label: 'Earthy Sage', primary: '#4e5b31', secondary: '#82957b', desc: 'Olive greens, cozy clay and soft stone' },
     { id: 'terracotta-ochre', label: 'Terracotta Ochre', primary: '#9e6241', secondary: '#c98a4b', desc: 'Sun-baked clay, warm desert sand' },
     { id: 'reggae-gold', label: 'Reggae Roots & Gold', primary: '#324024', secondary: '#d4a343', desc: 'Roots forest, ochre gold and earth warmth' },
@@ -37,10 +41,10 @@ export const ThemeCustomizerModal: React.FC<ThemeCustomizerModalProps> = ({
   const fontKeys = Object.keys(FONT_CONFIGS) as FontChoice[];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+    <BottomSheet isOpen={isOpen} onClose={onClose} title="Personalize Studio Aesthetic" themeConfig={themeConfig} darkMode={darkMode}>
       <div 
         id="theme-customizer-dialog"
-        className="w-full max-w-xl rounded-2xl p-6 sm:p-7 shadow-2xl border transition-all max-h-[90vh] overflow-y-auto"
+        className="w-full"
         style={{
           backgroundColor: darkMode ? themeConfig.cardDark : themeConfig.cardLight,
           borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight,
@@ -52,25 +56,16 @@ export const ThemeCustomizerModal: React.FC<ThemeCustomizerModalProps> = ({
           style={{ borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight }}
         >
           <div>
-            <h3 className="font-display text-2xl font-bold tracking-tight">
-              Personalize Studio Aesthetic
-            </h3>
             <p className="text-xs font-body text-stone-500 dark:text-stone-400 mt-1">
-              Fine-tune earthy color palettes, typography, and mindful notification cycles
+              Pick your mood: playful palettes, expressive fonts, and a space that feels like you
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors"
-          >
-            <X className="w-5 h-5 text-stone-500" />
-          </button>
         </div>
 
         {/* 1. Earthy Color Schemes */}
         <div className="mt-6">
           <label className="text-xs font-mono uppercase tracking-wider font-semibold text-stone-500 dark:text-stone-400 block mb-3">
-            Earthy Color Palette
+            Your Color Playground
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {presets.map((preset) => {
@@ -194,7 +189,7 @@ export const ThemeCustomizerModal: React.FC<ThemeCustomizerModalProps> = ({
               <div>
                 <p className="font-semibold text-sm">Daily Affirmation Reminder</p>
                 <p className="text-xs text-stone-500 dark:text-stone-400">
-                  Receive a mindful crown and soul inspiration prompt every morning
+                  Make room for a mindful moment of inspiration
                 </p>
               </div>
             </div>
@@ -238,6 +233,7 @@ export const ThemeCustomizerModal: React.FC<ThemeCustomizerModalProps> = ({
         <div className="mt-6 flex justify-end">
           <button
             onClick={onClose}
+            aria-label="Close theme customizer"
             className="px-6 py-2.5 rounded-full text-sm font-semibold text-white shadow-xs transition-transform hover:scale-[1.02]"
             style={{ backgroundColor: themeConfig.primary }}
           >
@@ -246,6 +242,6 @@ export const ThemeCustomizerModal: React.FC<ThemeCustomizerModalProps> = ({
         </div>
 
       </div>
-    </div>
+    </BottomSheet>
   );
 };

@@ -78,7 +78,7 @@ export const PwaInstallBanner: React.FC<PwaInstallBannerProps> = ({
             <p className="text-[11px] text-stone-500 dark:text-stone-400">
               {isIOS 
                 ? 'On iOS: Tap Share ⎙ then select "Add to Home Screen"' 
-                : 'Experience instant loading, offline typography studio and loc quotes anywhere'}
+                : 'Keep your quote studio and inspiration sanctuary close, even offline'}
             </p>
           </div>
         </div>

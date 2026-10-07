@@ -18,7 +18,7 @@ import {
   Tag,
   AlertCircle
 } from 'lucide-react';
-import { QuoteItem, QuoteCategory, QuoteFeedback, SixHourTrendingTheme } from './types/quote';
+import { QuoteItem, QuoteCategory, QuoteFeedback, SixHourTrendingTheme, SanctuaryTab, QUOTE_CATEGORIES, AestheticStyle } from './types/quote';
 import { 
   getCurrentSixHourTheme, 
   INITIAL_CURATED_QUOTES, 
@@ -72,10 +72,10 @@ import { ThemeCustomizerModal } from './components/ThemeCustomizerModal';
 import { FeedbackModal } from './components/FeedbackModal';
 import { DailyAffirmationModal } from './components/DailyAffirmationModal';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
+import { ManifestationBox } from './components/ManifestationBox';
 
 export default function App() {
-  // Navigation tabs: 'studio' | 'explore' | 'favorites' | 'affirmations'
-  const [activeTab, setActiveTab] = useState<'studio' | 'explore' | 'favorites' | 'affirmations'>('studio');
+  const [activeTab, setActiveTab] = useState<SanctuaryTab>('studio');
 
   // Preferences: theme colors, typography, dark mode, notifications
   const [preferences, setPreferences] = useState<UserPreferences>(() => loadLocalPreferences());
@@ -109,7 +109,10 @@ export default function App() {
   const [isAffirmationModalOpen, setIsAffirmationModalOpen] = useState(false);
   const [activeFeedbackQuote, setActiveFeedbackQuote] = useState<QuoteItem | null>(null);
 
-  const themeConfig: ThemeConfig = THEME_CONFIGS[preferences.themeColor] || THEME_CONFIGS['earthy-sage'];
+  const themeConfig: ThemeConfig = THEME_CONFIGS[preferences.themeColor] || THEME_CONFIGS['lavender-pop'];
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [activeTab]);
 
   // 1. Sync Dark Mode class to html element
   useEffect(() => {
@@ -243,6 +246,10 @@ export default function App() {
     const updated = { ...preferences, ...newPrefs };
     setPreferences(updated);
     saveLocalPreferences(updated);
+    if (newPrefs.fontChoice !== undefined) {
+      const fontFamily = newPrefs.fontChoice;
+      setStudioQuote((previous) => ({ ...previous, fontFamily }));
+    }
     if (newPrefs.darkMode !== undefined) {
       setDarkMode(newPrefs.darkMode);
     }
@@ -261,8 +268,8 @@ export default function App() {
       if (perm === 'granted') {
         handleUpdatePreferences({ dailyNotificationEnabled: true });
         // Send welcoming test affirmation
-        new Notification('Scriber Daily Affirmation Activated 👑', {
-          body: 'Your crown is an archive of strength and divine patience. Walk in quiet royalty today.',
+        new Notification('Scriber Daily Affirmation Activated', {
+          body: 'Your dreams deserve attention. Take one small, kind step toward what matters to you today.',
           icon: '/pwa-192x192.png',
         });
       } else {
@@ -361,7 +368,7 @@ export default function App() {
       id: `fb-${Date.now()}`,
       quoteId,
       userId: user?.uid || 'guest-soul',
-      userName: user?.displayName || 'Locs & Soul Friend',
+      userName: user?.displayName || 'Sanctuary Friend',
       comment,
       createdAt: new Date().toISOString(),
     };
@@ -386,7 +393,7 @@ export default function App() {
   const handleGenerateQuoteAI = async (params: {
     userInput?: string;
     category: QuoteCategory;
-    aestheticStyle?: any;
+    aestheticStyle?: AestheticStyle;
   }) => {
     setIsGeneratingQuote(true);
     try {
@@ -409,13 +416,13 @@ export default function App() {
         text: generated.text,
         authorName: generated.authorName || 'Scriber Muse',
         category: generated.category || params.category,
-        visualStyle: generated.visualStyle || 'Locs Sanctuary',
+        visualStyle: generated.visualStyle || 'Inspiration Sanctuary',
         fontFamily: generated.fontFamily || 'fraunces',
-        backgroundStyle: generated.backgroundStyle || 'locs-crown-art',
+        backgroundStyle: generated.backgroundStyle || 'aurora-bloom',
         accentColor: generated.accentColor || '#c98a4b',
         likesCount: 1,
         highlightWords: generated.highlightWords || [],
-        vibeBadge: generated.vibeBadge || 'Crown Inspiration',
+        vibeBadge: generated.vibeBadge || 'Everyday Inspiration',
         createdAt: new Date().toISOString(),
       };
 
@@ -439,16 +446,16 @@ export default function App() {
       // Fallback locally
       const fallbackQuote: QuoteItem = {
         id: `quote-${Date.now()}`,
-        text: "My dreadlocs are sacred roots grown skyward. I do not ask for permission to let my natural crown flourish.",
-        authorName: "Crown Elder",
-        category: params.category || 'locs-hair',
-        visualStyle: "Crown Elevation",
+        text: "You can begin again with what you have, where you are. A small brave step is still a beautiful beginning.",
+        authorName: "Scriber Notes",
+        category: params.category || 'growth',
+        visualStyle: "Aurora Bloom",
         fontFamily: "playfair",
-        backgroundStyle: "locs-crown-art",
-        accentColor: "#c98a4b",
+        backgroundStyle: "aurora-bloom",
+        accentColor: "#6940b5",
         likesCount: 1,
-        highlightWords: ["sacred", "roots", "crown"],
-        vibeBadge: "Dreadlocs Pride",
+        highlightWords: ["brave", "beginning"],
+        vibeBadge: "Fresh Possibility",
         createdAt: new Date().toISOString(),
       };
       setStudioQuote(fallbackQuote);
@@ -476,8 +483,8 @@ export default function App() {
     setActiveTab('studio');
     await handleGenerateQuoteAI({
       userInput: theme.inspirationalSeed,
-      category: 'locs-hair',
-      aestheticStyle: theme.cycleId.includes('roots') ? 'reggae-roots' : theme.cycleId.includes('genz') ? 'gen-z' : 'locs-crown',
+      category: 'creative-flow',
+      aestheticStyle: 'earthy-minimal',
     });
   };
 
@@ -503,10 +510,11 @@ export default function App() {
 
   return (
     <div 
-      className="min-h-screen transition-colors duration-200 flex flex-col font-body"
+      className="sanctuary-shell min-h-dvh transition-colors duration-200 flex flex-col font-body"
       style={{
         backgroundColor: darkMode ? themeConfig.bgDark : themeConfig.bgLight,
         color: darkMode ? themeConfig.textDark : themeConfig.textLight,
+        paddingBottom: 'calc(88px + env(safe-area-inset-bottom))',
       }}
     >
       {/* PWA Install Banner */}
@@ -531,11 +539,26 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main aria-labelledby={`nav-tab-${activeTab}`} className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {activeTab === 'manifest' && <ManifestationBox themeConfig={themeConfig} darkMode={darkMode} />}
         
         {/* TAB 1: STUDIO */}
         {activeTab === 'studio' && (
           <div className="space-y-8 animate-fade-in">
+            <section className="hidden lg:grid md:grid-cols-[1.4fr_1fr] gap-6 items-center py-3 sm:py-6">
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-[.2em]" style={{ color: themeConfig.accent }}>Words for every version of you</span>
+                <h1 className="font-display text-4xl sm:text-6xl font-bold leading-tight mt-3">A little inspiration.<br /><span style={{ color: themeConfig.primary }}>A world of possibility.</span></h1>
+                <p className="text-sm sm:text-base max-w-lg mt-4 text-stone-600 dark:text-stone-300">Quotes to feel, words to keep, and dreams to grow. Make something that feels like you.</p>
+                <button onClick={() => setActiveTab('explore')} className="mt-5 inline-flex items-center gap-2 text-sm font-semibold underline underline-offset-4" style={{ color: darkMode ? themeConfig.textDark : themeConfig.primary }}>Find your next favorite quote <Compass size={16} /></button>
+              </div>
+              <button onClick={() => setActiveTab('manifest')} className="relative overflow-hidden text-left rounded-[2rem] p-7 sm:p-8 border transition-transform hover:-translate-y-1"
+                style={{ background: darkMode ? 'linear-gradient(130deg, #302547, #193e3a)' : 'linear-gradient(130deg, #e9dcff, #d6f3e9)', borderColor: darkMode ? '#58436f' : '#d9c9f1' }}>
+                <span className="text-xs uppercase font-semibold tracking-widest text-violet-800 dark:text-violet-200">Introducing the manifestation box</span>
+                <span className="block font-hand text-4xl sm:text-5xl mt-5 text-violet-950 dark:text-violet-50">What if it all<br />begins with a page?</span>
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/80 dark:bg-violet-950/60 mt-6 px-4 py-2 text-xs font-semibold text-violet-900 dark:text-violet-100">Plant a possibility <Sparkles size={15} /></span>
+              </button>
+            </section>
             {/* 6-Hour Trending Banner */}
             <SixHourTrendingBanner
               theme={trendingTheme}
@@ -560,7 +583,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: EXPLORE (Locs & Roots Sanctuary) */}
+        {/* TAB 2: SANCTUARY */}
         {activeTab === 'explore' && (
           <div className="space-y-6 animate-fade-in">
             
@@ -578,10 +601,10 @@ export default function App() {
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
                 <h2 className="font-display text-2xl sm:text-3xl font-bold tracking-tight">
-                  Locs, Roots & Soul Sanctuary
+                  Inspiration Sanctuary
                 </h2>
                 <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">
-                  Curated and community inspirations celebrating crown patience, reggae culture, and relatable gen-z wisdom
+                  A place for every feeling: love, growth, courage, joy, and all the chapters in between.
                 </p>
               </div>
 
@@ -592,7 +615,8 @@ export default function App() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search past quotes, locs, authors..."
+                  placeholder="Search quotes, feelings, authors..."
+                  aria-label="Search sanctuary quotes"
                   className="w-full pl-9 pr-4 py-2 rounded-full border text-xs sm:text-sm bg-white dark:bg-stone-900/60 focus:outline-hidden focus:ring-2"
                   style={{
                     borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight,
@@ -604,15 +628,7 @@ export default function App() {
 
             {/* Category Filter Pills */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none">
-              {[
-                { id: 'all', label: 'All Inspirations' },
-                { id: 'locs-hair', label: '👑 Locs & Crown' },
-                { id: 'reggae-roots', label: '🌿 Roots Reggae' },
-                { id: 'gen-z-motivation', label: '✨ Gen-Z Vibe' },
-                { id: 'daily-affirmation', label: '🌸 Affirmations' },
-                { id: 'earthy-zen', label: '🍂 Earthy Zen' },
-                { id: 'creative-flow', label: '🖋️ Scribe Poetry' },
-              ].map((cat) => (
+              {[{ id: 'all' as const, label: 'All Inspirations' }, ...QUOTE_CATEGORIES].map((cat) => (
                 <button
                   key={cat.id}
                   onClick={() => setSelectedCategory(cat.id as QuoteCategory)}
@@ -701,14 +717,14 @@ export default function App() {
                   Your Sanctuary is Empty
                 </h3>
                 <p className="text-xs text-stone-500 dark:text-stone-400 mb-6">
-                  Save your favorite loc quotes, reggae wisdom, and custom typography cards from the Studio or Explore tabs.
+                  Save the words that move you, your favorite affirmations, and custom typography cards from the Studio or Sanctuary.
                 </p>
                 <button
                   onClick={() => setActiveTab('explore')}
                   className="px-5 py-2.5 rounded-full text-xs font-semibold text-white"
                   style={{ backgroundColor: themeConfig.primary }}
                 >
-                  Explore Locs & Roots Quotes
+                  Explore the Sanctuary
                 </button>
               </div>
             ) : (
@@ -754,13 +770,13 @@ export default function App() {
                 }}
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                Crown & Soul Grounding
+                A Moment for You
               </span>
               <h2 className="font-display text-3xl sm:text-4xl font-bold tracking-tight mb-2">
                 Sacred Daily Affirmations
               </h2>
               <p className="text-sm text-stone-500 dark:text-stone-400">
-                Ground yourself in gratitude, celebrate every coil of your locs, and cultivate unshakeable peace.
+                A gentle reset for your day. Find words for your confidence, your connections, and your next chapter.
               </p>
             </div>
 
@@ -802,10 +818,10 @@ export default function App() {
                           category: "daily-affirmation",
                           visualStyle: item.focus,
                           fontFamily: "fraunces",
-                          backgroundStyle: "locs-crown-art",
-                          accentColor: "#c98a4b",
+                          backgroundStyle: "aurora-bloom",
+                          accentColor: "#6940b5",
                           likesCount: 1,
-                          highlightWords: ["peace", "crown"],
+                          highlightWords: ["peace", "possibility"],
                           vibeBadge: item.focus,
                           createdAt: new Date().toISOString(),
                         });
@@ -841,10 +857,10 @@ export default function App() {
             >
               <div>
                 <h4 className="font-display text-lg font-bold">
-                  Never Miss a Morning Crown Affirmation
+                  A Little Morning Inspiration
                 </h4>
                 <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
-                  Activate scheduled push notifications to receive loc hair encouragement and soulful vibes every morning at {preferences.notificationTime || '9:00 AM'}.
+                  Set your preferred reminder time to {preferences.notificationTime || '9:00 AM'} and enable browser notifications for daily inspiration.
                 </p>
               </div>
 
@@ -875,12 +891,12 @@ export default function App() {
             <span className="font-display font-bold text-sm tracking-tight text-stone-800 dark:text-stone-200">
               Scriber
             </span>
-            <span>• Earthy Quote Studio & Loc Hair Inspiration Sanctuary</span>
+            <span>• Inspiration sanctuary. Words to keep. Dreams to grow.</span>
           </div>
           <div className="flex items-center gap-4 text-[11px] font-mono">
             <span>PWA Offline-First</span>
             <span>•</span>
-            <span>Cloud Synced</span>
+            <span>{isCloudSynced ? 'Cloud Connected' : 'Local Mode'}</span>
             <span>•</span>
             <span>6-Hour Cycles</span>
           </div>

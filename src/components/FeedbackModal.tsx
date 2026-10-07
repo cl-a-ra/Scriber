@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Send, Heart, Sparkles, MessageCircle } from 'lucide-react';
+import { Send, Heart, Sparkles, MessageCircle } from 'lucide-react';
 import { QuoteItem, QuoteFeedback } from '../types/quote';
 import { ThemeConfig } from '../lib/themeStyles';
+import { BottomSheet } from './BottomSheet';
 
 interface FeedbackModalProps {
   quote: QuoteItem | null;
@@ -36,10 +37,10 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+    <BottomSheet isOpen={isOpen} onClose={onClose} title="Echoes on this Quote" themeConfig={themeConfig} darkMode={darkMode}>
       <div 
         id="community-feedback-modal"
-        className="w-full max-w-lg rounded-2xl p-6 shadow-2xl border transition-all max-h-[85vh] flex flex-col justify-between"
+        className="w-full flex flex-col justify-between"
         style={{
           backgroundColor: darkMode ? themeConfig.cardDark : themeConfig.cardLight,
           borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight,
@@ -53,18 +54,9 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
           <div>
             <div className="flex items-center gap-1.5 text-xs font-mono text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider mb-1">
               <Sparkles className="w-3.5 h-3.5" />
-              Community Reflections & Crown Feedback
+              Community Reflections
             </div>
-            <h3 className="font-display text-lg font-bold">
-              Echoes on this Quote
-            </h3>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors"
-          >
-            <X className="w-5 h-5 text-stone-500" />
-          </button>
         </div>
 
         {/* Quote Miniature Context */}
@@ -83,7 +75,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
             <div className="text-center py-8 text-stone-400 dark:text-stone-500 text-xs">
               <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-40" />
               <p>No community reflections yet.</p>
-              <p className="mt-0.5">Be the first to leave an encouraging word or locs hair tip!</p>
+              <p className="mt-0.5">Be the first to share what these words mean to you.</p>
             </div>
           ) : (
             feedbacks.map((fb) => (
@@ -119,7 +111,8 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
             type="text"
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
-            placeholder="Add an encouraging reflection or loc wisdom..."
+            placeholder="Add an encouraging reflection..."
+            aria-label="Your reflection"
             className="flex-1 px-3.5 py-2 rounded-xl border text-xs bg-stone-50 dark:bg-stone-900/50 focus:outline-hidden"
             style={{
               borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight,
@@ -128,6 +121,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
           />
           <button
             type="submit"
+            aria-label="Post reflection"
             disabled={!commentText.trim()}
             className="p-2.5 rounded-xl text-white shadow-xs transition-opacity disabled:opacity-40"
             style={{ backgroundColor: themeConfig.primary }}
@@ -137,6 +131,6 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
         </form>
 
       </div>
-    </div>
+    </BottomSheet>
   );
 };

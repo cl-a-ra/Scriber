@@ -18,6 +18,24 @@ export interface ThemeConfig {
 }
 
 export const THEME_CONFIGS: Record<ThemeColorPreset, ThemeConfig> = {
+  'lavender-pop': {
+    name: 'Lavender Playground', badge: 'Dream in Color',
+    primary: '#6940b5', bgLight: '#faf7ff', bgDark: '#171225',
+    cardLight: '#ffffff', cardDark: '#261f38', borderLight: '#e3d8f5', borderDark: '#45365e',
+    textLight: '#302047', textDark: '#f2eaff', accent: '#9e58cf', accentBg: '#eee2ff',
+  },
+  'sunshine-club': {
+    name: 'Sunshine Club', badge: 'Little Joys',
+    primary: '#a64221', bgLight: '#fffaf0', bgDark: '#24160f',
+    cardLight: '#ffffff', cardDark: '#36251c', borderLight: '#f4dcc1', borderDark: '#60402a',
+    textLight: '#482919', textDark: '#fff2df', accent: '#c45b29', accentBg: '#ffe7bb',
+  },
+  'ocean-daydream': {
+    name: 'Ocean Daydream', badge: 'Make Waves',
+    primary: '#096d80', bgLight: '#f0fbfc', bgDark: '#0e2028',
+    cardLight: '#ffffff', cardDark: '#19333e', borderLight: '#c5e8eb', borderDark: '#2b5361',
+    textLight: '#163e48', textDark: '#e1f7fc', accent: '#137f8f', accentBg: '#cdf1f3',
+  },
   'earthy-sage': {
     name: 'Earthy Sage & Lo-Fi Clay',
     badge: 'Cozy Earth',
@@ -119,12 +137,12 @@ export const FONT_CONFIGS: Record<FontChoice, { name: string; styleClass: string
   syne: {
     name: 'Syne',
     styleClass: 'font-genz',
-    description: 'Gen-Z experimental modern display'
+    description: 'Playful, expressive modern display'
   },
   playfair: {
     name: 'Playfair Display',
     styleClass: 'font-editorial',
-    description: 'Regal serif for royal crown aesthetics'
+    description: 'Expressive serif for timeless words'
   },
   jakarta: {
     name: 'Plus Jakarta Sans',
@@ -142,9 +160,9 @@ export const FONT_CONFIGS: Record<FontChoice, { name: string; styleClass: string
     description: 'Personal, cozy handwritten soul'
   },
   reggae: {
-    name: 'Abril Roots',
+    name: 'Abril Fatface',
     styleClass: 'font-reggae',
-    description: 'Bold roots & culture display'
+    description: 'Big-hearted, bold poster lettering'
   }
 };
 
@@ -154,6 +172,15 @@ export function getBackgroundVisual(style: BackgroundStyle, darkMode: boolean): 
   textClass: string;
 } {
   switch (style) {
+    case 'aurora-bloom':
+    case 'sunset-checker':
+    case 'celestial-night':
+    case 'citrus-garden':
+      return {
+        backgroundImage: getSanctuaryBackground(style, darkMode),
+        backgroundClass: 'bg-cover bg-center',
+        textClass: darkMode ? 'text-violet-50' : 'text-violet-950',
+      };
     case 'reggae-roots-art':
       return {
         backgroundImage: `url("${ART_ASSETS.reggaeRoots}")`,
@@ -209,4 +236,35 @@ export function getBackgroundVisual(style: BackgroundStyle, darkMode: boolean): 
         textClass: darkMode ? 'text-[#ede6de]' : 'text-[#2e2620]'
       };
   }
+}
+
+export const SANCTUARY_BACKGROUNDS: { id: BackgroundStyle; label: string; previewColor: string }[] = [
+  { id: 'aurora-bloom', label: 'Aurora Bloom', previewColor: '#be9bf2' },
+  { id: 'sunset-checker', label: 'Peach Picnic', previewColor: '#f4a787' },
+  { id: 'celestial-night', label: 'Starlight Diary', previewColor: '#6350b6' },
+  { id: 'citrus-garden', label: 'Citrus Daydream', previewColor: '#b7d883' },
+];
+
+// SVG artwork is shared by the live canvas and image export.
+export function getSanctuaryBackground(style: BackgroundStyle, darkMode: boolean): string | undefined {
+  const base = darkMode ? '#211b35' : '#f8efff';
+  let artwork: string;
+  switch (style) {
+    case 'aurora-bloom':
+      artwork = `<defs><radialGradient id="a"><stop stop-color="#b799f5"/><stop offset="1" stop-color="${base}"/></radialGradient></defs><rect width="1080" height="1080" fill="url(#a)"/><ellipse cx="120" cy="210" rx="320" ry="230" fill="#ee9cb8" opacity=".5"/><ellipse cx="1000" cy="880" rx="400" ry="300" fill="#75d9ce" opacity=".45"/><path d="M-80 810 Q350 440 1160 720 M-80 855 Q350 485 1160 765" fill="none" stroke="#fff" stroke-width="4" opacity=".45"/>`;
+      break;
+    case 'sunset-checker':
+      artwork = `<defs><pattern id="p" width="160" height="160" patternUnits="userSpaceOnUse"><rect width="160" height="160" fill="${darkMode ? '#382131' : '#ffe9d9'}"/><path d="M0 0H80V80H0ZM80 80H160V160H80Z" fill="${darkMode ? '#573342' : '#f9c5b0'}"/></pattern></defs><rect width="1080" height="1080" fill="url(#p)"/><circle cx="980" cy="100" r="190" fill="#ffc86b" opacity=".7"/><path d="M-50 950 Q260 700 550 1100" fill="none" stroke="#ed809f" stroke-width="100" opacity=".6"/>`;
+      break;
+    case 'celestial-night':
+      artwork = `<rect width="1080" height="1080" fill="${darkMode ? '#171632' : '#cac3f0'}"/><circle cx="920" cy="170" r="110" fill="#ffe4aa"/><circle cx="955" cy="140" r="100" fill="${darkMode ? '#171632' : '#cac3f0'}"/><g fill="#fff5d6"><path d="M140 120l10 35 35 10-35 10-10 35-10-35-35-10 35-10ZM850 850l12 42 42 12-42 12-12 42-12-42-42-12 42-12Z"/><circle cx="330" cy="80" r="5"/><circle cx="1000" cy="550" r="5"/><circle cx="100" cy="690" r="6"/><circle cx="670" cy="980" r="6"/></g><ellipse cx="300" cy="1100" rx="600" ry="230" fill="#9778d3" opacity=".45"/>`;
+      break;
+    case 'citrus-garden':
+      artwork = `<rect width="1080" height="1080" fill="${darkMode ? '#1c302a' : '#eef4d9'}"/><g fill="#81b899" opacity=".6"><ellipse cx="70" cy="210" rx="70" ry="190" transform="rotate(-30 70 210)"/><ellipse cx="1000" cy="850" rx="90" ry="240" transform="rotate(35 1000 850)"/></g><g fill="#ffc66e" stroke="#fff0c4" stroke-width="12"><circle cx="980" cy="90" r="140"/><circle cx="50" cy="1030" r="150"/></g><g fill="#ec96ae"><circle cx="150" cy="480" r="24"/><circle cx="950" cy="540" r="20"/></g>`;
+      break;
+    default:
+      return undefined;
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">${artwork}</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }

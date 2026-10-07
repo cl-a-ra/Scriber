@@ -1,5 +1,6 @@
 import { QuoteItem } from '../types/quote';
 import { ART_ASSETS } from './assets';
+import { getSanctuaryBackground } from './themeStyles';
 
 export async function exportQuoteAsImage(
   quote: QuoteItem,
@@ -14,7 +15,10 @@ export async function exportQuoteAsImage(
   if (!ctx) throw new Error('Canvas not supported');
 
   // Background
-  if (quote.backgroundStyle === 'reggae-roots-art') {
+  const sanctuaryBackground = getSanctuaryBackground(quote.backgroundStyle, darkMode);
+  if (sanctuaryBackground) {
+    await drawImageCover(ctx, sanctuaryBackground.slice(5, -2), width, height, 1);
+  } else if (quote.backgroundStyle === 'reggae-roots-art') {
     await drawImageCover(ctx, ART_ASSETS.reggaeRoots, width, height, 0.9);
   } else if (quote.backgroundStyle === 'locs-crown-art') {
     await drawImageCover(ctx, ART_ASSETS.locsCrown, width, height, 0.9);
@@ -87,6 +91,7 @@ export async function exportQuoteAsImage(
   let fontName = 'Fraunces, serif';
   if (quote.fontFamily === 'syne') fontName = 'Syne, sans-serif';
   if (quote.fontFamily === 'playfair') fontName = 'Playfair Display, serif';
+  if (quote.fontFamily === 'jakarta') fontName = 'Plus Jakarta Sans, sans-serif';
   if (quote.fontFamily === 'mono') fontName = 'Space Mono, monospace';
   if (quote.fontFamily === 'hand') fontName = 'Caveat, cursive';
   if (quote.fontFamily === 'reggae') fontName = 'Abril Fatface, cursive';

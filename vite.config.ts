@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
@@ -36,11 +37,11 @@ export default defineConfig(() => {
         includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png'],
         manifest: {
           id: '/',
-          name: 'Scriber — Minimalist Quote Studio & Loc Inspiration',
+          name: 'Scriber — Inspiration Sanctuary',
           short_name: 'Scriber',
-          description: 'Minimalist earthy quote generator, typography studio, and inspiration sanctuary with loc hair wisdom and daily affirmations.',
-          theme_color: '#5b4636',
-          background_color: '#fbf8f3',
+          description: 'A colorful quote studio, inspiration sanctuary, and personal manifestation writing box.',
+          theme_color: '#6940b5',
+          background_color: '#faf7ff',
           display: 'standalone',
           start_url: '/',
           scope: '/',

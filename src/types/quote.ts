@@ -1,5 +1,10 @@
 export type QuoteCategory = 
   | 'all'
+  | 'self-worth'
+  | 'growth'
+  | 'love'
+  | 'dreams'
+  | 'joy'
   | 'locs-hair'
   | 'reggae-roots'
   | 'gen-z-motivation'
@@ -17,6 +22,9 @@ export type FontChoice =
   | 'reggae';
 
 export type ThemeColorPreset = 
+  | 'lavender-pop'
+  | 'sunshine-club'
+  | 'ocean-daydream'
   | 'earthy-sage'
   | 'terracotta-ochre'
   | 'reggae-gold'
@@ -25,6 +33,10 @@ export type ThemeColorPreset =
   | 'desert-rose';
 
 export type BackgroundStyle = 
+  | 'aurora-bloom'
+  | 'sunset-checker'
+  | 'celestial-night'
+  | 'citrus-garden'
   | 'texture-linen'
   | 'reggae-roots-art'
   | 'locs-crown-art'
@@ -41,6 +53,21 @@ export type LayoutStyle =
   | 'poster-bold'
   | 'cozy-card'
   | 'minimal-stamp';
+
+export type SanctuaryTab = 'studio' | 'explore' | 'favorites' | 'affirmations' | 'manifest';
+export type AestheticStyle = 'earthy-minimal' | 'reggae-roots' | 'gen-z' | 'locs-crown' | 'vintage-dub';
+
+export const QUOTE_CATEGORIES: { id: QuoteCategory; label: string }[] = [
+  { id: 'self-worth', label: 'Self-Worth' },
+  { id: 'growth', label: 'Growth' },
+  { id: 'love', label: 'Love & Connection' },
+  { id: 'dreams', label: 'Dreams & Ambition' },
+  { id: 'joy', label: 'Everyday Joy' },
+  { id: 'gen-z-motivation', label: 'Your Own Era' },
+  { id: 'daily-affirmation', label: 'Affirmations' },
+  { id: 'earthy-zen', label: 'Mindful Living' },
+  { id: 'creative-flow', label: 'Creativity & Poetry' },
+];
 
 export interface QuoteItem {
   id: string;

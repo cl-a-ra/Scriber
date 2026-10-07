@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Sparkles, Bell, BellRing, Copy, Check, Heart, Volume2, Share2 } from 'lucide-react';
+import { Sparkles, Bell, BellRing, Copy, Check, Heart, Volume2, Share2 } from 'lucide-react';
 import { DAILY_AFFIRMATIONS_BANK } from '../lib/cycleThemes';
 import { ThemeConfig } from '../lib/themeStyles';
+import { BottomSheet } from './BottomSheet';
 
 interface DailyAffirmationModalProps {
   isOpen: boolean;
@@ -42,10 +43,10 @@ export const DailyAffirmationModal: React.FC<DailyAffirmationModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
+    <BottomSheet isOpen={isOpen} onClose={onClose} title="Daily Affirmation" themeConfig={themeConfig} darkMode={darkMode}>
       <div 
         id="daily-affirmation-modal"
-        className="w-full max-w-lg rounded-3xl p-6 sm:p-8 shadow-2xl border transition-all text-center relative overflow-hidden"
+        className="w-full text-center relative overflow-hidden"
         style={{
           backgroundColor: darkMode ? themeConfig.cardDark : themeConfig.cardLight,
           borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight,
@@ -57,14 +58,6 @@ export const DailyAffirmationModal: React.FC<DailyAffirmationModalProps> = ({
           className="absolute -top-12 -left-12 w-48 h-48 rounded-full opacity-15 blur-2xl pointer-events-none"
           style={{ backgroundColor: themeConfig.accent }}
         />
-
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-stone-200 dark:hover:bg-stone-800 transition-colors"
-        >
-          <X className="w-5 h-5 text-stone-400" />
-        </button>
 
         {/* Affirmation Header */}
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-wider mb-4 border"
@@ -78,11 +71,8 @@ export const DailyAffirmationModal: React.FC<DailyAffirmationModalProps> = ({
           <span>{currentAffirmation.focus}</span>
         </div>
 
-        <h3 className="font-display text-2xl font-bold tracking-tight mb-2">
-          Daily Sacred Affirmation
-        </h3>
         <p className="text-xs text-stone-500 dark:text-stone-400 max-w-xs mx-auto mb-6">
-          Read aloud, breathe deeply, and crown yourself in quiet confidence
+          Read aloud, breathe deeply, and meet yourself with kindness
         </p>
 
         {/* Affirmation Text Card */}
@@ -135,7 +125,7 @@ export const DailyAffirmationModal: React.FC<DailyAffirmationModalProps> = ({
                 Morning Affirmation Push
               </p>
               <p className="text-[11px] text-stone-500 dark:text-stone-400">
-                {notificationsEnabled ? 'Active: Delivering daily inspiration' : 'Get notified with crown wisdom daily'}
+                {notificationsEnabled ? 'Daily inspiration enabled' : 'Make room for daily inspiration'}
               </p>
             </div>
           </div>
@@ -154,6 +144,6 @@ export const DailyAffirmationModal: React.FC<DailyAffirmationModalProps> = ({
         </div>
 
       </div>
-    </div>
+    </BottomSheet>
   );
 };

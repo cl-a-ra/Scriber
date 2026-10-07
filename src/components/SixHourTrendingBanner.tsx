@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Clock, Sparkles, RefreshCw, Wand2, Compass } from 'lucide-react';
 import { SixHourTrendingTheme } from '../types/quote';
 import { ThemeConfig } from '../lib/themeStyles';
+import { BottomSheet, useCompactLayout } from './BottomSheet';
 
 interface SixHourTrendingBannerProps {
   theme: SixHourTrendingTheme;
@@ -20,13 +21,15 @@ export const SixHourTrendingBanner: React.FC<SixHourTrendingBannerProps> = ({
   themeConfig,
   darkMode,
 }) => {
-  return (
+  const [isOpen, setIsOpen] = useState(false);
+  const isCompact = useCompactLayout();
+  const content = (
     <div 
       id="six-hour-trending-banner"
       className="rounded-2xl p-5 sm:p-6 border transition-all relative overflow-hidden shadow-xs mb-8"
       style={{
-        backgroundColor: darkMode ? `${themeConfig.cardDark}` : '#fdfaf5',
-        borderColor: darkMode ? themeConfig.borderDark : '#e8decb',
+        backgroundColor: darkMode ? themeConfig.cardDark : themeConfig.accentBg,
+        borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight,
       }}
     >
       {/* Subtle organic background accent blob */}
@@ -48,7 +51,7 @@ export const SixHourTrendingBanner: React.FC<SixHourTrendingBannerProps> = ({
               }}
             >
               <Clock className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '10s' }} />
-              6-Hour Cycle Active
+              Today's Color Story
             </span>
 
             <span 
@@ -87,10 +90,10 @@ export const SixHourTrendingBanner: React.FC<SixHourTrendingBannerProps> = ({
 
             <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40">
               <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block mb-1">
-                Crown Locs Focus
+                A Thought to Keep
               </span>
               <p className="text-xs italic text-stone-700 dark:text-stone-300">
-                "{theme.locHairAffirmation}"
+                "{theme.inspirationalSeed}"
               </p>
             </div>
           </div>
@@ -100,7 +103,7 @@ export const SixHourTrendingBanner: React.FC<SixHourTrendingBannerProps> = ({
         <div className="flex flex-row lg:flex-col gap-2.5 flex-shrink-0">
           <button
             id="btn-apply-trending-typography"
-            onClick={() => onApplyTheme(theme)}
+            onClick={() => { setIsOpen(false); onApplyTheme(theme); }}
             className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold border transition-all hover:shadow-xs"
             style={{
               borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight,
@@ -114,7 +117,7 @@ export const SixHourTrendingBanner: React.FC<SixHourTrendingBannerProps> = ({
 
           <button
             id="btn-quick-generate-theme"
-            onClick={() => onQuickGenerateWithTheme(theme)}
+            onClick={() => { setIsOpen(false); onQuickGenerateWithTheme(theme); }}
             className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white transition-all shadow-xs hover:scale-[1.01]"
             style={{
               backgroundColor: themeConfig.primary,
@@ -127,5 +130,17 @@ export const SixHourTrendingBanner: React.FC<SixHourTrendingBannerProps> = ({
 
       </div>
     </div>
+  );
+  if (!isCompact) return content;
+  return (
+    <>
+      <button type="button" onClick={() => setIsOpen(true)} aria-haspopup="dialog"
+        className="w-full rounded-2xl border p-4 flex items-center justify-between gap-3 text-left"
+        style={{ backgroundColor: darkMode ? themeConfig.cardDark : themeConfig.accentBg, borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight }}>
+        <span><span className="block text-[10px] uppercase tracking-widest font-semibold mb-1">Today's Color Story</span><span className="font-display text-lg font-bold">{theme.themeTitle}</span></span>
+        <span className="text-xs flex items-center gap-2">View <Sparkles size={16} /></span>
+      </button>
+      <BottomSheet isOpen={isOpen} onClose={() => setIsOpen(false)} title="Today's Color Story" themeConfig={themeConfig} darkMode={darkMode}>{content}</BottomSheet>
+    </>
   );
 };

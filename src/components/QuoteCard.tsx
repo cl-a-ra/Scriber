@@ -222,7 +222,7 @@ export const QuoteCard: React.FC<QuoteCardProps> = ({
                 onOpenFeedback(quote);
               }}
               className="flex items-center gap-1 hover:text-stone-900 dark:hover:text-stone-200 transition-colors"
-              title="Community reflections & locs feedback"
+              title="Community reflections"
             >
               <MessageSquare className="w-4 h-4" />
               <span>{feedbackCount > 0 ? feedbackCount : 'Reflect'}</span>

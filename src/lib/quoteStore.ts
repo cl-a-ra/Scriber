@@ -39,7 +39,7 @@ export interface UserPreferences {
 }
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
-  themeColor: 'earthy-sage',
+  themeColor: 'lavender-pop',
   fontChoice: 'fraunces',
   darkMode: false,
   dailyNotificationEnabled: false,
@@ -107,7 +107,11 @@ export function loadLocalQuotes(): QuoteItem[] {
     if (raw) {
       const parsed: QuoteItem[] = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        const curated = new Map(INITIAL_CURATED_QUOTES.map((quote) => [quote.id, quote]));
+        return [
+          ...parsed.map((quote) => curated.get(quote.id) || quote),
+          ...INITIAL_CURATED_QUOTES.filter((quote) => !parsed.some((stored) => stored.id === quote.id)),
+        ];
       }
     }
   } catch (e) {

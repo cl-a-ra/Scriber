@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Sparkles, 
   Wand2, 
@@ -22,14 +22,15 @@ import {
   Tag
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { QuoteItem, QuoteCategory, FontChoice, BackgroundStyle, LayoutStyle } from '../types/quote';
-import { ThemeConfig, FONT_CONFIGS, getBackgroundVisual } from '../lib/themeStyles';
+import { QuoteItem, QuoteCategory, FontChoice, BackgroundStyle, LayoutStyle, QUOTE_CATEGORIES, AestheticStyle } from '../types/quote';
+import { ThemeConfig, FONT_CONFIGS, getBackgroundVisual, SANCTUARY_BACKGROUNDS } from '../lib/themeStyles';
 import { exportQuoteAsImage } from '../lib/canvasExporter';
+import { ResponsiveSheet } from './BottomSheet';
 
 interface QuoteStudioProps {
   currentQuote: QuoteItem;
   onChangeQuote: (updated: QuoteItem) => void;
-  onGenerateAI: (params: { userInput?: string; category: QuoteCategory; aestheticStyle?: any }) => Promise<void>;
+  onGenerateAI: (params: { userInput?: string; category: QuoteCategory; aestheticStyle?: AestheticStyle }) => Promise<void>;
   isGenerating: boolean;
   onSaveToPersonalCollection: (quote: QuoteItem) => void;
   isSaved: boolean;
@@ -48,30 +49,25 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
   darkMode,
 }) => {
   const [userInputPrompt, setUserInputPrompt] = useState('');
-  const [activeCategory, setActiveCategory] = useState<QuoteCategory>(currentQuote.category || 'locs-hair');
-  const [activeVibe, setActiveVibe] = useState<'earthy-minimal' | 'reggae-roots' | 'gen-z' | 'locs-crown'>('locs-crown');
+  const [topicError, setTopicError] = useState('');
+  const topicInputRef = useRef<HTMLTextAreaElement>(null);
+  const [activeCategory, setActiveCategory] = useState<QuoteCategory>(currentQuote.category || 'self-worth');
+  const [activeVibe, setActiveVibe] = useState<AestheticStyle>('earthy-minimal');
   const [isMinimalFocusMode, setIsMinimalFocusMode] = useState(false);
+  const [isControlsOpen, setIsControlsOpen] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
   const [isExportingImage, setIsExportingImage] = useState(false);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  useEffect(() => { setActiveCategory(currentQuote.category); }, [currentQuote.category]);
 
   // Background visual styling
   const bgVisual = getBackgroundVisual(currentQuote.backgroundStyle, darkMode);
   const fontStyle = FONT_CONFIGS[currentQuote.fontFamily] || FONT_CONFIGS.fraunces;
 
-  const categories: { id: QuoteCategory; label: string }[] = [
-    { id: 'locs-hair', label: '👑 Locs & Crown' },
-    { id: 'reggae-roots', label: '🌿 Roots & Reggae' },
-    { id: 'gen-z-motivation', label: '✨ Gen-Z Vibe' },
-    { id: 'daily-affirmation', label: '🌸 Daily Affirmation' },
-    { id: 'earthy-zen', label: '🍂 Earthy Zen' },
-    { id: 'creative-flow', label: '🖋️ Scribe Poetry' },
-  ];
+  const categories = QUOTE_CATEGORIES;
 
   const backgrounds: { id: BackgroundStyle; label: string; previewColor: string }[] = [
-    { id: 'locs-crown-art', label: 'Crown Majesty Art', previewColor: '#c98a4b' },
-    { id: 'reggae-roots-art', label: 'Reggae Roots Art', previewColor: '#d4a343' },
-    { id: 'genz-aesthetic-art', label: 'Gen-Z Matcha Art', previewColor: '#82957b' },
+    ...SANCTUARY_BACKGROUNDS,
     { id: 'gradient-terracotta', label: 'Warm Terracotta', previewColor: '#9e6241' },
     { id: 'gradient-earth', label: 'Earthy Clay Gradient', previewColor: '#7d4926' },
     { id: 'gradient-matcha', label: 'Matcha Cream Gradient', previewColor: '#4e5b31' },
@@ -80,54 +76,54 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
 
   const designPresets = [
     {
-      id: 'crown-majesty',
-      name: 'Crown Majesty',
-      category: 'locs-hair' as QuoteCategory,
+      id: 'aurora-bloom',
+      name: 'Aurora Bloom',
+      category: 'self-worth' as QuoteCategory,
       fontFamily: 'playfair' as FontChoice,
       fontName: 'Playfair Display',
-      backgroundStyle: 'locs-crown-art' as BackgroundStyle,
-      accentColor: '#c98a4b',
-      vibeBadge: 'Locs Royalty',
-      desc: 'Regal serif on royal locs artwork',
-      sampleQuote: 'My locs are an archive of divine patience. Each spiral holds ancestral memory and sovereign grace.',
-      author: 'Crown Elder',
+      backgroundStyle: 'aurora-bloom' as BackgroundStyle,
+      accentColor: '#6940b5',
+      vibeBadge: 'Already Enough',
+      desc: 'Expressive serif with dreamy color blooms',
+      sampleQuote: 'You do not have to become someone else to begin. You are already worthy of a beautiful life.',
+      author: 'Scriber Notes',
     },
     {
       id: 'roots-dub',
-      name: 'Roots & Reggae Dub',
-      category: 'reggae-roots' as QuoteCategory,
+      name: 'Peach Picnic',
+      category: 'joy' as QuoteCategory,
       fontFamily: 'reggae' as FontChoice,
-      fontName: 'Abril Roots',
-      backgroundStyle: 'reggae-roots-art' as BackgroundStyle,
-      accentColor: '#d4a343',
-      vibeBadge: 'Roots Vibration',
-      desc: 'Bold roots poster on vintage dub art',
-      sampleQuote: 'Feel the roots beneath your feet, let the bass steady your heartbeat, and walk in love.',
-      author: 'Trenchtown Echoes',
+      fontName: 'Abril Fatface',
+      backgroundStyle: 'sunset-checker' as BackgroundStyle,
+      accentColor: '#b34c37',
+      vibeBadge: 'Everyday Magic',
+      desc: 'A playful checkerboard and golden-hour glow',
+      sampleQuote: 'Collect the little joys. A good song, a shared laugh, sunlight on the floor. This is your life happening.',
+      author: 'Scriber Notes',
     },
     {
       id: 'genz-matcha',
-      name: 'Gen-Z Matcha Clean',
+      name: 'Citrus Daydream',
       category: 'gen-z-motivation' as QuoteCategory,
       fontFamily: 'syne' as FontChoice,
       fontName: 'Syne Display',
-      backgroundStyle: 'genz-aesthetic-art' as BackgroundStyle,
+      backgroundStyle: 'citrus-garden' as BackgroundStyle,
       accentColor: '#6b8265',
       vibeBadge: 'Soft Matcha Era',
-      desc: 'Modern experimental font & lo-fi cafe',
+      desc: 'Modern type with leafy shapes and citrus suns',
       sampleQuote: 'Entering my quiet era: iced oat matcha, silent notifications, and protecting my sacred peace.',
       author: 'Modern Soul',
     },
     {
       id: 'earthy-editorial',
-      name: 'Earthy Editorial Paper',
-      category: 'earthy-zen' as QuoteCategory,
+      name: 'Starlight Diary',
+      category: 'dreams' as QuoteCategory,
       fontFamily: 'fraunces' as FontChoice,
       fontName: 'Fraunces Serif',
-      backgroundStyle: 'texture-linen' as BackgroundStyle,
-      accentColor: '#4e5b31',
-      vibeBadge: 'Organic Editorial',
-      desc: 'Warm serif on clean linen texture',
+      backgroundStyle: 'celestial-night' as BackgroundStyle,
+      accentColor: '#6940b5',
+      vibeBadge: 'Cosmic Calm',
+      desc: 'Soft serif, scattered stars, and a crescent moon',
       sampleQuote: 'Quiet patience is not the absence of momentum. It is the steady root gathering strength before the bloom.',
       author: 'Sage Journal',
     },
@@ -169,17 +165,25 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
       category: preset.category,
       text: replaceText ? preset.sampleQuote : currentQuote.text,
       authorName: replaceText ? preset.author : currentQuote.authorName,
-      highlightWords: replaceText ? ['roots', 'patience', 'crown'] : currentQuote.highlightWords,
+      highlightWords: replaceText ? [] : currentQuote.highlightWords,
     });
     setActiveCategory(preset.category);
   };
 
   const handleGenerate = async () => {
+    const topic = userInputPrompt.trim();
+    if (!topic) {
+      setTopicError('Tell us what you want your quote to be about, such as love, hair, or a fresh start.');
+      topicInputRef.current?.focus();
+      return;
+    }
+    setTopicError('');
     await onGenerateAI({
-      userInput: userInputPrompt.trim() || undefined,
+      userInput: topic,
       category: activeCategory,
       aestheticStyle: activeVibe,
     });
+    setIsControlsOpen(false);
   };
 
   const handleSave = () => {
@@ -194,7 +198,7 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
   };
 
   const handleCopyQuote = async () => {
-    const textToCopy = `“${currentQuote.text}”\n— ${currentQuote.authorName || 'Scriber'}\n\nVia Scriber (Earthy Quote & Loc Inspiration Studio)`;
+    const textToCopy = `“${currentQuote.text}”\n— ${currentQuote.authorName || 'Scriber'}\n\nVia Scriber (Inspiration Sanctuary)`;
     try {
       await navigator.clipboard.writeText(textToCopy);
       setCopiedText(true);
@@ -223,7 +227,7 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
 
   // Social Sharing triggers
   const handleShareTwitter = () => {
-    const text = encodeURIComponent(`“${currentQuote.text}” — ${currentQuote.authorName || 'Scriber'}\n\n#Scriber #Locs #Roots #Motivation`);
+    const text = encodeURIComponent(`“${currentQuote.text}” — ${currentQuote.authorName || 'Scriber'}\n\n#Scriber #Quotes #Inspiration`);
     window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
   };
 
@@ -254,22 +258,22 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
   };
 
   return (
-    <div id="quote-studio-container" className="space-y-6">
+    <div id="quote-studio-container" className="flex flex-col gap-6">
       
       {/* Top Bar with Minimal Focus Mode Toggle */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
-            Quote Studio & Typographic Canvas
+            Quote Studio
           </h2>
           <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 font-body">
-            Scribe your own words or let generative AI shape unique locs, reggae & gen-z visual cards
+            Your words, your mood. Create a quote card for any feeling, chapter, or possibility.
           </p>
         </div>
 
         <button
           onClick={() => setIsMinimalFocusMode(!isMinimalFocusMode)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-medium border transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
+          className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-medium border transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
           style={{
             borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight,
             color: darkMode ? themeConfig.textDark : themeConfig.textLight,
@@ -282,11 +286,16 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
           </span>
         </button>
       </div>
+      <button type="button" onClick={() => setIsControlsOpen(true)} aria-haspopup="dialog"
+        className="lg:hidden w-full flex items-center justify-center gap-2 rounded-2xl min-h-12 px-5 py-3 text-sm font-semibold text-white"
+        style={{ backgroundColor: themeConfig.primary }}>
+        <Sliders size={18} /> Create & Style a Quote
+      </button>
 
       {/* Signature Design Options Showcase Strip */}
       <div 
         id="design-options-showcase"
-        className="rounded-2xl p-4 sm:p-5 border shadow-xs transition-all"
+        className="order-3 lg:order-2 rounded-2xl p-4 sm:p-5 border shadow-xs transition-all"
         style={{
           backgroundColor: darkMode ? `${themeConfig.cardDark}` : '#fbf8f2',
           borderColor: darkMode ? themeConfig.borderDark : '#e6dac7',
@@ -315,7 +324,7 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
         </div>
 
         {/* Presets Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+        <div className="grid grid-flow-col auto-cols-[140px] overflow-x-auto pb-2 lg:grid-flow-row lg:auto-cols-auto lg:grid-cols-6 gap-2.5">
           {designPresets.map((preset) => {
             const isActive = currentQuote.fontFamily === preset.fontFamily && currentQuote.backgroundStyle === preset.backgroundStyle;
             const fontClass = FONT_CONFIGS[preset.fontFamily]?.styleClass || 'font-display';
@@ -382,22 +391,60 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
       </div>
 
       {/* Main Studio Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className="order-2 lg:order-3 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* Left Side: Generative Controls & Customization (hidden in full minimal focus mode) */}
         {!isMinimalFocusMode && (
-          <div 
-            id="studio-controls-panel"
-            className="lg:col-span-5 space-y-5 rounded-2xl p-5 sm:p-6 border shadow-xs"
-            style={{
-              backgroundColor: darkMode ? themeConfig.cardDark : themeConfig.cardLight,
-              borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight,
-            }}
-          >
-            {/* 1. Category Filter Selector */}
+          <ResponsiveSheet isOpen={isControlsOpen} onClose={() => setIsControlsOpen(false)} title="Create & Style a Quote" themeConfig={themeConfig} darkMode={darkMode}>
+            <div id="studio-controls-panel" className="space-y-5">
+            <div>
+              <label htmlFor="quote-topic" className="font-display text-lg font-bold block mb-2">
+                What would you like your quote to be about?
+              </label>
+              <p id="quote-topic-help" className="text-xs text-stone-500 dark:text-stone-300 mb-3">
+                Tell us in your own words. Pick a topic or describe a feeling, person, or moment.
+              </p>
+              <textarea
+                id="quote-topic"
+                ref={topicInputRef}
+                value={userInputPrompt}
+                onChange={(event) => {
+                  setUserInputPrompt(event.target.value);
+                  setTopicError('');
+                }}
+                placeholder="e.g. love that feels like home, embracing my natural hair, or finding courage to start over..."
+                rows={3}
+                maxLength={1000}
+                aria-required="true"
+                aria-invalid={Boolean(topicError)}
+                aria-describedby={`quote-topic-help${topicError ? ' quote-topic-error' : ''}`}
+                className="w-full px-3.5 py-3 rounded-xl border text-sm bg-stone-50 dark:bg-stone-900/50 resize-y focus:outline-hidden focus:ring-2"
+                style={{
+                  borderColor: topicError ? '#dc2626' : (darkMode ? themeConfig.borderDark : themeConfig.borderLight),
+                  color: darkMode ? themeConfig.textDark : themeConfig.textLight,
+                }}
+              />
+              {topicError && <p id="quote-topic-error" role="alert" className="mt-2 text-xs text-red-700 dark:text-red-300">{topicError}</p>}
+              <div className="flex flex-wrap items-center gap-2 mt-3" role="group" aria-label="Quote topic ideas">
+                <span className="text-[11px] text-stone-500 dark:text-stone-300">Try:</span>
+                {['Love', 'Hair', 'Friendship', 'New beginnings'].map((topic) => (
+                  <button key={topic} type="button"
+                    onClick={() => {
+                      setUserInputPrompt(topic);
+                      setTopicError('');
+                      topicInputRef.current?.focus();
+                    }}
+                    className="px-3 py-1.5 rounded-full border text-xs font-medium"
+                    style={{ borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight }}>
+                    {topic}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div>
               <label className="text-xs font-mono uppercase tracking-wider font-semibold text-stone-500 dark:text-stone-400 block mb-2">
-                Quote Theme & Crown Category
+                Choose a Quote Category
               </label>
               <div className="flex flex-wrap gap-1.5">
                 {categories.map((cat) => (
@@ -420,24 +467,6 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
               </div>
             </div>
 
-            {/* 2. User Input / Topic Prompt */}
-            <div>
-              <label className="text-xs font-mono uppercase tracking-wider font-semibold text-stone-500 dark:text-stone-400 block mb-2">
-                Topic, Feelings or Key Words
-              </label>
-              <input
-                type="text"
-                value={userInputPrompt}
-                onChange={(e) => setUserInputPrompt(e.target.value)}
-                placeholder="e.g. locs patience, reggae bass roots, soft boundaries, morning peace"
-                className="w-full px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm bg-stone-50 dark:bg-stone-900/50 focus:outline-hidden focus:ring-2"
-                style={{
-                  borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight,
-                  color: darkMode ? themeConfig.textDark : themeConfig.textLight,
-                }}
-              />
-            </div>
-
             {/* 3. Aesthetic Vibe */}
             <div>
               <label className="text-xs font-mono uppercase tracking-wider font-semibold text-stone-500 dark:text-stone-400 block mb-2">
@@ -445,14 +474,12 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
               </label>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { id: 'locs-crown', label: 'Crown Locs', desc: 'Sovereign locs wisdom' },
-                  { id: 'reggae-roots', label: 'Roots Reggae', desc: 'Dub poetry & vinyl soul' },
-                  { id: 'gen-z', label: 'Gen-Z Vibe', desc: 'Matcha lo-fi boundaries' },
-                  { id: 'earthy-minimal', label: 'Earthy Minimal', desc: 'Quiet linen stillness' },
+                  { id: 'gen-z' as const, label: 'Playful & Bold', desc: 'Modern words, big feelings' },
+                  { id: 'earthy-minimal' as const, label: 'Soft & Reflective', desc: 'A little pause, a deeper thought' },
                 ].map((vibe) => (
                   <button
                     key={vibe.id}
-                    onClick={() => setActiveVibe(vibe.id as any)}
+                    onClick={() => setActiveVibe(vibe.id)}
                     className={`p-2.5 rounded-xl border text-left transition-all ${
                       activeVibe === vibe.id ? 'ring-2 shadow-xs' : 'hover:border-stone-400'
                     }`}
@@ -536,7 +563,7 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
                         backgroundColor: darkMode ? `${themeConfig.bgDark}60` : '#ffffff',
                       }}
                     >
-                      <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: bg.previewColor }} />
+                      <span className="w-10 h-10 rounded-lg flex-shrink-0 bg-cover bg-center" style={{ backgroundColor: bg.previewColor, backgroundImage: getBackgroundVisual(bg.id, darkMode).backgroundImage }} />
                       <span className="truncate">{bg.label}</span>
                     </button>
                   );
@@ -544,7 +571,8 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
               </div>
             </div>
 
-          </div>
+            </div>
+          </ResponsiveSheet>
         )}
 
         {/* Right Side: Interactive Typography Canvas Card & Share Deck */}
@@ -596,6 +624,7 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
             {/* Central Editable Quote Text */}
             <div className="relative z-10 my-8">
               <textarea
+                aria-label="Quote text"
                 value={currentQuote.text}
                 onChange={(e) => onChangeQuote({ ...currentQuote, text: e.target.value })}
                 rows={4}
@@ -612,6 +641,7 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
               <div className="flex items-center justify-center gap-2 mt-4">
                 <span className="text-stone-400 text-sm">—</span>
                 <input
+                  aria-label="Quote author"
                   type="text"
                   value={currentQuote.authorName}
                   onChange={(e) => onChangeQuote({ ...currentQuote, authorName: e.target.value })}
