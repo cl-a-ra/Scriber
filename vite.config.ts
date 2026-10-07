@@ -4,24 +4,15 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig, Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import express from 'express';
-import { apiRouter } from './src/server/apiRouter';
+import { createApiApp } from './src/server/app';
 
 function expressApiPlugin(): Plugin {
   return {
     name: 'vite-express-api-plugin',
     configureServer(server) {
-      const app = express();
-      app.use(express.json());
-      app.use('/api', apiRouter);
+      const app = createApiApp();
 
-      server.middlewares.use((req, res, next) => {
-        if (req.originalUrl?.startsWith('/api') || req.url?.startsWith('/api')) {
-          app(req as any, res as any, next);
-          return;
-        }
-        next();
-      });
+      server.middlewares.use(app);
     }
   };
 }

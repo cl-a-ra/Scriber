@@ -22,7 +22,15 @@ export function BottomSheet({ isOpen, onClose, title, themeConfig, darkMode, chi
     const previousOverflow = document.body.style.overflow;
     dialog.showModal();
     document.body.style.overflow = 'hidden';
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !dialog.matches(':modal')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeRef.current();
+    };
+    document.addEventListener('keydown', handleEscape, true);
     return () => {
+      document.removeEventListener('keydown', handleEscape, true);
       dialog.close();
       document.body.style.overflow = previousOverflow;
       if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
@@ -33,13 +41,6 @@ export function BottomSheet({ isOpen, onClose, title, themeConfig, darkMode, chi
   return (
     <dialog ref={dialogRef} aria-label={title} className="sanctuary-sheet"
       onCancel={(event) => { event.preventDefault(); closeRef.current(); }}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          event.stopPropagation();
-          closeRef.current();
-        }
-      }}
       onClick={(event) => {
         if (event.target !== event.currentTarget) return;
         const bounds = event.currentTarget.getBoundingClientRect();

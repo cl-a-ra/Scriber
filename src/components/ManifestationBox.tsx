@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Sparkles, Sprout, ArrowUpRight, Check, Trash2, Bookmark, Download, Wand2 } from 'lucide-react';
 import { ThemeConfig, FONT_CONFIGS, getBackgroundVisual, SANCTUARY_BACKGROUNDS } from '../lib/themeStyles';
 import { BackgroundStyle, FontChoice } from '../types/quote';
 import { ResponsiveSheet } from './BottomSheet';
+import { WritingMethod, ManifestationGuideRequest, MANIFESTATION_FOCUSES } from '../types/manifestation';
+import { build369Practice, parseManifestationRequest } from '../lib/aiContracts';
+import { generateManifestationGuide } from '../lib/aiClient';
 
-type WritingMethod = 'freewrite' | 'future-self' | 'gratitude' | '369';
 interface Draft {
   intention: string;
   feeling: string;
@@ -67,9 +69,12 @@ export function ManifestationBox({ themeConfig, darkMode }: { themeConfig: Theme
   const [draft, setDraft] = useState<Draft>(initial.draft);
   const [entries, setEntries] = useState<Manifestation[]>(initial.entries);
   const [error, setError] = useState(initial.error);
+  const [guideError, setGuideError] = useState('');
   const [notice, setNotice] = useState('');
   const [guideOpen, setGuideOpen] = useState(true);
   const [isGuideSheetOpen, setIsGuideSheetOpen] = useState(false);
+  const [isGeneratingGuide, setIsGeneratingGuide] = useState(false);
+  const draftRevision = useRef(0);
   useEffect(() => {
     if (draft === initial.draft && entries === initial.entries) return;
     try {
@@ -82,12 +87,14 @@ export function ManifestationBox({ themeConfig, darkMode }: { themeConfig: Theme
   }, [draft, entries, initial]);
 
   const updateDraft = (changes: Partial<Draft>) => {
+    draftRevision.current += 1;
     setDraft((previous) => ({ ...previous, ...changes }));
     setNotice('');
+    setGuideError('');
   };
   const buildGuide = () => {
     if (!draft.intention.trim() || !draft.feeling.trim() || !draft.action.trim()) {
-      setError('Add your intention, how you want to feel, and one small action before creating a guided draft.');
+      setGuideError('Add your intention, how you want to feel, and one small action before creating a guided draft.');
       return;
     }
     if (draft.text.trim() && !window.confirm('Replace your current writing with a guided draft? Your saved entries will stay in your box.')) return;
@@ -99,12 +106,41 @@ export function ManifestationBox({ themeConfig, darkMode }: { themeConfig: Theme
       freewrite: `${statement}\n\nThis matters to me because...\n\nToday, my next small step is ${action}.\n\nI give myself permission to learn along the way.`,
       'future-self': `Dear future me,\n\nI am proud of the way you kept showing up for ${intention}. You are learning to feel ${feeling}.\n\nIt started with one small step: ${action}.\n\nSomething you learned along the way was...\n\nWith love,\nYour present self`,
       gratitude: `Today, I am grateful for...\n\nI welcome ${intention} into my life, and I imagine feeling ${feeling}.\n\nA moment I can picture is...\n\nI support this intention by choosing to ${action}.\n\nOne good thing already here is...`,
-      '369': `My intention: ${statement}\nMy grounded action: ${action}\n\n${[3, 6, 9].map((count, index) =>
-        `${['Morning', 'Afternoon', 'Evening'][index]} / ${count} repetitions\n${Array.from({ length: count }, (_, line) => `${line + 1}. ${statement}`).join('\n')}`).join('\n\n')}`,
+      '369': build369Practice(statement, action),
     };
     updateDraft({ text: templates[draft.method] });
     setNotice('Prompt-based draft created. Make it yours below. No AI service was called.');
     setIsGuideSheetOpen(false);
+  };
+  const buildAIGuide = async () => {
+    let request: ManifestationGuideRequest;
+    try {
+      request = parseManifestationRequest({
+        intention: draft.intention, feeling: draft.feeling, action: draft.action, focus: draft.focus, method: draft.method,
+      });
+    } catch (validationError) {
+      setGuideError(validationError instanceof Error ? validationError.message : 'Please complete the guide fields.');
+      return;
+    }
+    if (draft.text.trim() && !window.confirm('Replace your current writing with an AI draft? Saved entries will stay in your box.')) return;
+    const revision = draftRevision.current;
+    setGuideError('');
+    setIsGeneratingGuide(true);
+    try {
+      const result = await generateManifestationGuide(request);
+      if (draftRevision.current !== revision) {
+        setGuideError('Your draft changed while AI was writing. The response was not applied so your edits are preserved. Please try again.');
+        return;
+      }
+      updateDraft({ text: `${result.text}\n\nReflection prompts\n${result.reflectionPrompts.map((prompt, index) => `${index + 1}. ${prompt}`).join('\n')}` });
+      setNotice('AI draft created. Read it, reflect, and make it your own before saving.');
+      setIsGuideSheetOpen(false);
+    } catch (generationError) {
+      console.error('Manifestation generation failed', { message: generationError instanceof Error ? generationError.message : 'Unknown error' });
+      setGuideError(generationError instanceof Error ? generationError.message : 'AI generation failed. Your writing has been preserved.');
+    } finally {
+      setIsGeneratingGuide(false);
+    }
   };
   const saveEntry = (event: React.FormEvent) => {
     event.preventDefault();
@@ -136,10 +172,11 @@ export function ManifestationBox({ themeConfig, darkMode }: { themeConfig: Theme
           <h1 className="font-display text-3xl sm:text-5xl font-bold">The manifestation box<span style={{ color: themeConfig.accent }}>.</span></h1>
           <p className="text-sm mt-3 max-w-xl text-stone-600 dark:text-stone-300">Dream it. Write it. Take one small step. This is your private place to turn possibilities into intentions.</p>
         </div>
-        <span className="text-xs rounded-full px-4 py-2 border" style={panelStyle}>Private to this browser · No cloud sync</span>
+        <span className="text-xs rounded-full px-4 py-2 border" style={panelStyle}>Saved on this device · No cloud sync</span>
       </section>
       <div role="status" aria-live="polite" className="text-sm">{notice}</div>
       {error && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 text-red-800 p-3 text-sm">{error}</p>}
+      {guideError && !isGuideSheetOpen && <p role="alert" className="lg:hidden rounded-xl border border-red-300 bg-red-50 text-red-800 p-3 text-sm">{guideError}</p>}
       <button type="button" onClick={() => setIsGuideSheetOpen(true)} aria-haspopup="dialog"
         className="lg:hidden flex items-center justify-center gap-2 w-full min-h-12 rounded-2xl px-5 py-3 text-sm font-semibold text-white"
         style={{ backgroundColor: themeConfig.primary }}><Wand2 size={18} /> Open Guided Writing</button>
@@ -152,7 +189,7 @@ export function ManifestationBox({ themeConfig, darkMode }: { themeConfig: Theme
             <button onClick={() => setGuideOpen(!guideOpen)} aria-expanded={guideOpen} aria-controls="manifest-guide" className="text-xs underline">{guideOpen ? 'Hide' : 'Show'}</button>
           </div>
           <div className="rounded-xl bg-violet-50 text-violet-900 p-3 text-xs leading-relaxed">
-            <strong>AI guide · frontend preview</strong><br />Try the guided flow with local writing templates. Personalized AI guidance will be connected in the backend phase.
+            <strong>Your AI writing guide</strong><br />AI uses your intention, feeling, action, focus, and writing method to create a personalized draft. These fields are sent to Gemini only when you choose AI. Offline templates stay on your device.
           </div>
           {guideOpen && <div id="manifest-guide" className="space-y-4">
             <label className="block text-xs font-semibold">What are you inviting in?
@@ -164,7 +201,9 @@ export function ManifestationBox({ themeConfig, darkMode }: { themeConfig: Theme
             <label className="block text-xs font-semibold">One small action you can take
               <input className={`${inputClass} mt-2`} value={draft.action} onChange={(event) => updateDraft({ action: event.target.value })} maxLength={240} placeholder="Spend 20 minutes on my portfolio" />
             </label>
-            <button type="button" onClick={buildGuide} className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-white text-sm font-semibold" style={{ backgroundColor: themeConfig.primary }}><Sparkles size={16} /> Create a guided draft</button>
+            <button type="button" onClick={buildAIGuide} disabled={isGeneratingGuide} className="w-full flex items-center justify-center gap-2 rounded-xl py-3 text-white text-sm font-semibold disabled:opacity-60" style={{ backgroundColor: themeConfig.primary }}><Sparkles size={16} />{isGeneratingGuide ? 'Writing your AI draft...' : 'Create an AI draft'}</button>
+            <button type="button" onClick={buildGuide} disabled={isGeneratingGuide} className="w-full rounded-xl border py-3 text-sm font-semibold disabled:opacity-60" style={{ borderColor: panelStyle.borderColor }}>Use an offline writing template</button>
+            {guideError && <p role="alert" className="text-xs text-red-700 dark:text-red-300">{guideError}</p>}
           </div>}
           <p className="text-xs text-stone-500 dark:text-stone-300">A reflection practice, not a promise of outcomes. Pair your intentions with care and practical action.</p>
           </div>
@@ -196,7 +235,7 @@ export function ManifestationBox({ themeConfig, darkMode }: { themeConfig: Theme
             <div className="grid sm:grid-cols-2 gap-4">
               <label className="text-xs font-semibold">Focus
                 <select className={`${inputClass} mt-2`} value={draft.focus} onChange={(event) => updateDraft({ focus: event.target.value })}>
-                  {['Personal growth', 'Love & connection', 'Career & creativity', 'Abundance', 'Well-being', 'Adventure'].map((focus) => <option key={focus}>{focus}</option>)}
+                  {MANIFESTATION_FOCUSES.map((focus) => <option key={focus}>{focus}</option>)}
                 </select>
               </label>
               <label className="text-xs font-semibold">Writing font

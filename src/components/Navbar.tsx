@@ -1,5 +1,5 @@
 import React from 'react';
-import { Feather, Palette, Moon, Sun, Bookmark, Compass, Sparkles, LogIn, LogOut, Bell, Sprout, Wifi, WifiOff } from 'lucide-react';
+import { Feather, Palette, Moon, Sun, Bookmark, Compass, Sparkles, LogIn, LogOut, Bell, Sprout, Wifi, WifiOff, UserRound } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { ThemeConfig } from '../lib/themeStyles';
 import { SanctuaryTab } from '../types/quote';
@@ -19,11 +19,12 @@ interface NavbarProps {
   themeConfig: ThemeConfig;
   trendingCountdown: string;
   savedCount: number;
+  accountBusy: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   activeTab, setActiveTab, user, isOnline, isCloudSynced, onSignIn, onSignOut,
-  onOpenThemeModal, onOpenAffirmationModal, darkMode, onToggleDarkMode, themeConfig, savedCount,
+  onOpenThemeModal, onOpenAffirmationModal, darkMode, onToggleDarkMode, themeConfig, savedCount, accountBusy,
 }) => {
   const tabs = [
     { id: 'studio' as const, label: 'Studio', icon: Feather },
@@ -31,6 +32,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'manifest' as const, label: 'Manifest', icon: Sprout },
     { id: 'favorites' as const, label: 'Saved', icon: Bookmark },
     { id: 'affirmations' as const, label: 'Affirm', icon: Sparkles },
+    { id: 'profile' as const, label: 'Profile', icon: UserRound },
   ];
   return (
     <>
@@ -64,10 +66,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
             <button onClick={onOpenAffirmationModal} aria-label="Daily affirmation reminder" className="rounded-full min-w-11 min-h-11 flex items-center justify-center border"
               style={{ borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight }}><Bell size={18} /></button>
-            <button onClick={user ? onSignOut : onSignIn} aria-label={user ? 'Sign out' : 'Sign in for cloud sync'}
+            <button onClick={user ? onSignOut : onSignIn} aria-label={user ? 'Sign out' : 'Sign in with Google'}
+              disabled={accountBusy}
               className="flex items-center justify-center gap-2 rounded-full min-w-11 min-h-11 px-3 py-2.5 text-xs font-semibold text-white" style={{ backgroundColor: themeConfig.primary }}>
               {user ? <LogOut size={16} /> : <LogIn size={16} />}
-              <span className="hidden sm:inline">{user ? 'Sign out' : 'Cloud sync'}</span>
+              <span className="hidden sm:inline">{user ? 'Sign out' : 'Google sign-in'}</span>
             </button>
           </div>
         </div>
@@ -76,14 +79,14 @@ export const Navbar: React.FC<NavbarProps> = ({
     <nav aria-label="Main navigation" className="fixed bottom-0 inset-x-0 z-40 border-t backdrop-blur-xl"
       style={{ backgroundColor: `${darkMode ? themeConfig.cardDark : themeConfig.cardLight}f5`, borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight,
         paddingBottom: 'max(8px, env(safe-area-inset-bottom))', paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)' }}>
-      <div className="grid grid-cols-5 max-w-2xl mx-auto px-2 pt-2 gap-1">
+      <div className="grid grid-cols-6 max-w-2xl mx-auto px-2 pt-2 gap-1">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button key={id} id={`nav-tab-${id}`} onClick={() => setActiveTab(id)} aria-current={activeTab === id ? 'page' : undefined}
               aria-label={id === 'favorites' && savedCount ? `Saved (${savedCount})` : label}
-              className="flex flex-col items-center justify-center gap-1 rounded-2xl min-h-14 px-1 py-1 text-[10px] sm:text-xs font-semibold transition-colors"
+              className="min-w-0 flex flex-col items-center justify-center gap-1 rounded-2xl min-h-14 px-1 py-1 text-[9px] min-[360px]:text-[10px] sm:text-xs font-semibold transition-colors"
               style={{ color: activeTab === id ? (darkMode ? themeConfig.textDark : themeConfig.primary) : (darkMode ? '#c4bdd0' : '#68616f') }}>
-              <span className="flex items-center justify-center w-12 h-7 rounded-full" style={{ backgroundColor: activeTab === id ? themeConfig.primary : 'transparent', color: activeTab === id ? '#fff' : undefined }}><Icon size={19} /></span>
-              <span>{label}{id === 'favorites' && savedCount > 0 ? ` (${Math.min(savedCount, 99)}${savedCount > 99 ? '+' : ''})` : ''}</span>
+              <span className="relative flex items-center justify-center w-10 sm:w-12 h-7 rounded-full" style={{ backgroundColor: activeTab === id ? themeConfig.primary : 'transparent', color: activeTab === id ? '#fff' : undefined }}><Icon size={19} />{id === 'favorites' && savedCount > 0 && <span className="absolute -right-1 -top-1 rounded-full px-1 text-[8px] bg-violet-100 text-violet-900">{Math.min(savedCount, 99)}{savedCount > 99 ? '+' : ''}</span>}</span>
+              <span className="max-w-full truncate">{label}</span>
             </button>
           ))}
       </div>

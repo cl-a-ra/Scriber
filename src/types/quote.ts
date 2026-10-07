@@ -54,7 +54,7 @@ export type LayoutStyle =
   | 'cozy-card'
   | 'minimal-stamp';
 
-export type SanctuaryTab = 'studio' | 'explore' | 'favorites' | 'affirmations' | 'manifest';
+export type SanctuaryTab = 'studio' | 'explore' | 'favorites' | 'affirmations' | 'manifest' | 'profile';
 export type AestheticStyle = 'earthy-minimal' | 'reggae-roots' | 'gen-z' | 'locs-crown' | 'vintage-dub';
 
 export const QUOTE_CATEGORIES: { id: QuoteCategory; label: string }[] = [

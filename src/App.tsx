@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Search, 
   Filter, 
@@ -48,12 +48,12 @@ import {
   signOut, 
   googleProvider, 
   onAuthStateChanged, 
-  User, 
-  testFirestoreConnection 
+  User
 } from './lib/firebase';
 import { 
   collection, 
   doc, 
+  getDoc,
   setDoc, 
   deleteDoc, 
   onSnapshot, 
@@ -73,6 +73,10 @@ import { FeedbackModal } from './components/FeedbackModal';
 import { DailyAffirmationModal } from './components/DailyAffirmationModal';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { ManifestationBox } from './components/ManifestationBox';
+import { generateQuote } from './lib/aiClient';
+import { ProfileTab } from './components/ProfileTab';
+import { WelcomeCard } from './components/WelcomeCard';
+import { loadLocalProfile } from './lib/profileStore';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<SanctuaryTab>('studio');
@@ -83,6 +87,10 @@ export default function App() {
 
   // User auth state
   const [user, setUser] = useState<User | null>(null);
+  const [localProfile, setLocalProfile] = useState(() => loadLocalProfile(null, 'Scriber Muse'));
+  const [accountError, setAccountError] = useState('');
+  const [cloudSyncError, setCloudSyncError] = useState('');
+  const [accountBusy, setAccountBusy] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [isCloudSynced, setIsCloudSynced] = useState<boolean>(false);
 
@@ -94,7 +102,10 @@ export default function App() {
 
   // Active Quote in Studio
   const [studioQuote, setStudioQuote] = useState<QuoteItem>(() => quotes[0] || INITIAL_CURATED_QUOTES[0]);
+  const studioQuoteRef = useRef(studioQuote);
+  useEffect(() => { studioQuoteRef.current = studioQuote; }, [studioQuote]);
   const [isGeneratingQuote, setIsGeneratingQuote] = useState<boolean>(false);
+  const [generationError, setGenerationError] = useState('');
 
   // 6-Hour Trending cycle
   const [trendingTheme, setTrendingTheme] = useState<SixHourTrendingTheme>(() => getCurrentSixHourTheme());
@@ -131,11 +142,6 @@ export default function App() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial Firestore validation check mandated by firebase-skill
-    testFirestoreConnection().then((connected) => {
-      if (connected) setIsCloudSynced(true);
-    });
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
@@ -144,13 +150,18 @@ export default function App() {
 
   // 3. Listen to Firebase Auth state
   useEffect(() => {
+    let active = true;
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      setLocalProfile(loadLocalProfile(currentUser?.uid || null, currentUser?.displayName || 'Scriber Muse'));
+      setIsCloudSynced(false);
+      setCloudSyncError('');
       if (currentUser) {
-        setIsCloudSynced(true);
         // Sync user profile to Firestore
         try {
           const userDocRef = doc(db, 'users', currentUser.uid);
+          const existingProfile = await getDoc(userDocRef);
+          if (!active || auth.currentUser?.uid !== currentUser.uid) return;
           await setDoc(userDocRef, {
             uid: currentUser.uid,
             displayName: currentUser.displayName || 'Scriber Muse',
@@ -158,15 +169,23 @@ export default function App() {
             themeColor: preferences.themeColor,
             fontChoice: preferences.fontChoice,
             darkMode: preferences.darkMode,
-            createdAt: new Date().toISOString(),
+            ...(!existingProfile.exists() ? { createdAt: new Date().toISOString() } : {}),
             updatedAt: new Date().toISOString(),
           }, { merge: true });
+          if (active && auth.currentUser?.uid === currentUser.uid) {
+            setIsCloudSynced(true);
+            setCloudSyncError('');
+          }
         } catch (err) {
           console.warn('Could not sync user profile to cloud', err);
+          if (active && auth.currentUser?.uid === currentUser.uid) {
+            setIsCloudSynced(false);
+            setCloudSyncError('You are signed in, but cloud preferences could not sync. Your profile photo and bio remain device-local.');
+          }
         }
       }
     });
-    return () => unsubscribe();
+    return () => { active = false; unsubscribe(); };
   }, [preferences]);
 
   // 4. Firestore real-time sync for public quotes & saved quotes
@@ -196,6 +215,7 @@ export default function App() {
               createdAt: data.createdAt || new Date().toISOString(),
               highlightWords: data.highlightWords || [],
               vibeBadge: data.vibeBadge || '',
+              ...(typeof data.notes === 'string' ? { notes: data.notes } : {}),
             });
           });
 
@@ -282,19 +302,43 @@ export default function App() {
 
   // Sign In / Sign Out
   const handleSignIn = async () => {
+    setAccountBusy(true);
+    setAccountError('');
     try {
       await signInWithPopup(auth, googleProvider);
+      return true;
     } catch (err) {
-      console.warn('Google Sign-In dismissed or unavailable, continuing in offline mode', err);
+      console.warn('Google sign-in failed', err);
+      const code = typeof err === 'object' && err !== null && 'code' in err ? err.code : '';
+      const messages: Record<string, string> = {
+        'auth/popup-closed-by-user': 'Sign-in was canceled. Your local profile is unchanged.',
+        'auth/cancelled-popup-request': 'Another sign-in window was opened. Please finish sign-in there or try again.',
+        'auth/popup-blocked': 'Your browser blocked Google sign-in. Allow pop-ups for Scriber and try again.',
+        'auth/network-request-failed': 'Google sign-in could not connect. Check your internet connection and try again.',
+        'auth/unauthorized-domain': 'Google sign-in is not configured for this domain. The site owner must enable it in Firebase.',
+        'auth/operation-not-allowed': 'Google sign-in is not enabled in Firebase yet.',
+      };
+      setAccountError(typeof code === 'string' && messages[code] ? messages[code] : 'Google sign-in failed. Please try again. Your local profile is unchanged.');
+      return false;
+    } finally {
+      setAccountBusy(false);
     }
   };
 
   const handleSignOut = async () => {
+    setAccountBusy(true);
+    setAccountError('');
     try {
       await signOut(auth);
       setUser(null);
+      setLocalProfile(loadLocalProfile(null, 'Scriber Muse'));
+      return true;
     } catch (err) {
       console.warn('Sign out error', err);
+      setAccountError('Sign-out failed. You are still signed in. Please try again.');
+      return false;
+    } finally {
+      setAccountBusy(false);
     }
   };
 
@@ -395,34 +439,25 @@ export default function App() {
     category: QuoteCategory;
     aestheticStyle?: AestheticStyle;
   }) => {
+    const originalQuote = studioQuoteRef.current;
     setIsGeneratingQuote(true);
+    setGenerationError('');
     try {
-      const response = await fetch('/api/generate-quote', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userInput: params.userInput,
-          category: params.category,
-          aestheticStyle: params.aestheticStyle,
-          authorName: user?.displayName || undefined,
-        }),
+      const generated = await generateQuote({
+        userInput: params.userInput || '',
+        category: params.category,
+        aestheticStyle: params.aestheticStyle || 'earthy-minimal',
+        authorName: user?.displayName?.trim() || undefined,
       });
-
-      if (!response.ok) throw new Error('API request failed');
-
-      const generated = await response.json();
+      if (studioQuoteRef.current !== originalQuote) {
+        throw new Error('Your quote changed while AI was writing. The response was not applied so your edits are preserved. Please try again.');
+      }
+      const { stylingNotes, ...quoteDetails } = generated;
       const newQuote: QuoteItem = {
-        id: `quote-${Date.now()}`,
-        text: generated.text,
-        authorName: generated.authorName || 'Scriber Muse',
-        category: generated.category || params.category,
-        visualStyle: generated.visualStyle || 'Inspiration Sanctuary',
-        fontFamily: generated.fontFamily || 'fraunces',
-        backgroundStyle: generated.backgroundStyle || 'aurora-bloom',
-        accentColor: generated.accentColor || '#c98a4b',
-        likesCount: 1,
-        highlightWords: generated.highlightWords || [],
-        vibeBadge: generated.vibeBadge || 'Everyday Inspiration',
+        ...quoteDetails,
+        notes: stylingNotes,
+        id: `quote-${crypto.randomUUID()}`,
+        likesCount: 0,
         createdAt: new Date().toISOString(),
       };
 
@@ -441,25 +476,11 @@ export default function App() {
           console.warn('Quote saved locally, cloud sync will resume when connection is verified', e);
         }
       }
+      return true;
     } catch (err) {
-      console.error('Failed to generate quote via API', err);
-      // Fallback locally
-      const fallbackQuote: QuoteItem = {
-        id: `quote-${Date.now()}`,
-        text: "You can begin again with what you have, where you are. A small brave step is still a beautiful beginning.",
-        authorName: "Scriber Notes",
-        category: params.category || 'growth',
-        visualStyle: "Aurora Bloom",
-        fontFamily: "playfair",
-        backgroundStyle: "aurora-bloom",
-        accentColor: "#6940b5",
-        likesCount: 1,
-        highlightWords: ["brave", "beginning"],
-        vibeBadge: "Fresh Possibility",
-        createdAt: new Date().toISOString(),
-      };
-      setStudioQuote(fallbackQuote);
-      setQuotes((prev) => [fallbackQuote, ...prev]);
+      console.error('Quote generation failed', { message: err instanceof Error ? err.message : 'Unknown error' });
+      setGenerationError(err instanceof Error ? err.message : 'Quote generation failed. Please try again.');
+      return false;
     } finally {
       setIsGeneratingQuote(false);
     }
@@ -536,29 +557,25 @@ export default function App() {
         themeConfig={themeConfig}
         trendingCountdown={countdownString}
         savedCount={savedIds.length}
+        accountBusy={accountBusy}
       />
 
       {/* Main Content Area */}
       <main aria-labelledby={`nav-tab-${activeTab}`} className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {localProfile.error && <p role="alert" className="mb-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">{localProfile.error}</p>}
+        {(accountError || cloudSyncError) && activeTab !== 'profile' && <p role="alert" className="mb-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">{accountError || cloudSyncError}</p>}
+        {activeTab === 'profile' && <ProfileTab key={user?.uid || 'guest'} user={user} profile={localProfile.profile}
+          onProfileSaved={(profile) => setLocalProfile({ profile, error: '' })}
+          accountError={accountError || cloudSyncError} accountBusy={accountBusy} onSignIn={handleSignIn} onSignOut={handleSignOut}
+          preferences={preferences} themeConfig={themeConfig} darkMode={darkMode} onToggleDarkMode={handleToggleDarkMode}
+          onOpenThemeSettings={() => setIsThemeModalOpen(true)} onOpenAffirmationSettings={() => setIsAffirmationModalOpen(true)}
+          onNavigate={setActiveTab} savedCount={savedIds.length} likedCount={likedIds.length} />}
         {activeTab === 'manifest' && <ManifestationBox themeConfig={themeConfig} darkMode={darkMode} />}
         
         {/* TAB 1: STUDIO */}
         {activeTab === 'studio' && (
           <div className="space-y-8 animate-fade-in">
-            <section className="hidden lg:grid md:grid-cols-[1.4fr_1fr] gap-6 items-center py-3 sm:py-6">
-              <div>
-                <span className="text-xs font-semibold uppercase tracking-[.2em]" style={{ color: themeConfig.accent }}>Words for every version of you</span>
-                <h1 className="font-display text-4xl sm:text-6xl font-bold leading-tight mt-3">A little inspiration.<br /><span style={{ color: themeConfig.primary }}>A world of possibility.</span></h1>
-                <p className="text-sm sm:text-base max-w-lg mt-4 text-stone-600 dark:text-stone-300">Quotes to feel, words to keep, and dreams to grow. Make something that feels like you.</p>
-                <button onClick={() => setActiveTab('explore')} className="mt-5 inline-flex items-center gap-2 text-sm font-semibold underline underline-offset-4" style={{ color: darkMode ? themeConfig.textDark : themeConfig.primary }}>Find your next favorite quote <Compass size={16} /></button>
-              </div>
-              <button onClick={() => setActiveTab('manifest')} className="relative overflow-hidden text-left rounded-[2rem] p-7 sm:p-8 border transition-transform hover:-translate-y-1"
-                style={{ background: darkMode ? 'linear-gradient(130deg, #302547, #193e3a)' : 'linear-gradient(130deg, #e9dcff, #d6f3e9)', borderColor: darkMode ? '#58436f' : '#d9c9f1' }}>
-                <span className="text-xs uppercase font-semibold tracking-widest text-violet-800 dark:text-violet-200">Introducing the manifestation box</span>
-                <span className="block font-hand text-4xl sm:text-5xl mt-5 text-violet-950 dark:text-violet-50">What if it all<br />begins with a page?</span>
-                <span className="inline-flex items-center gap-2 rounded-full bg-white/80 dark:bg-violet-950/60 mt-6 px-4 py-2 text-xs font-semibold text-violet-900 dark:text-violet-100">Plant a possibility <Sparkles size={15} /></span>
-              </button>
-            </section>
+            <WelcomeCard displayName={localProfile.profile.displayName} themeConfig={themeConfig} darkMode={darkMode} onNavigate={setActiveTab} />
             {/* 6-Hour Trending Banner */}
             <SixHourTrendingBanner
               theme={trendingTheme}
@@ -575,6 +592,7 @@ export default function App() {
               onChangeQuote={setStudioQuote}
               onGenerateAI={handleGenerateQuoteAI}
               isGenerating={isGeneratingQuote}
+              generationError={generationError}
               onSaveToPersonalCollection={handleToggleSave}
               isSaved={savedIds.includes(studioQuote.id)}
               themeConfig={themeConfig}

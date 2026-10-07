@@ -30,8 +30,9 @@ import { ResponsiveSheet } from './BottomSheet';
 interface QuoteStudioProps {
   currentQuote: QuoteItem;
   onChangeQuote: (updated: QuoteItem) => void;
-  onGenerateAI: (params: { userInput?: string; category: QuoteCategory; aestheticStyle?: AestheticStyle }) => Promise<void>;
+  onGenerateAI: (params: { userInput?: string; category: QuoteCategory; aestheticStyle?: AestheticStyle }) => Promise<boolean>;
   isGenerating: boolean;
+  generationError: string;
   onSaveToPersonalCollection: (quote: QuoteItem) => void;
   isSaved: boolean;
   themeConfig: ThemeConfig;
@@ -43,6 +44,7 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
   onChangeQuote,
   onGenerateAI,
   isGenerating,
+  generationError,
   onSaveToPersonalCollection,
   isSaved,
   themeConfig,
@@ -178,12 +180,12 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
       return;
     }
     setTopicError('');
-    await onGenerateAI({
+    const succeeded = await onGenerateAI({
       userInput: topic,
       category: activeCategory,
       aestheticStyle: activeVibe,
     });
-    setIsControlsOpen(false);
+    if (succeeded) setIsControlsOpen(false);
   };
 
   const handleSave = () => {
@@ -258,7 +260,7 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
   };
 
   return (
-    <div id="quote-studio-container" className="flex flex-col gap-6">
+    <div id="quote-studio-container" className="flex flex-col gap-6 scroll-mt-24">
       
       {/* Top Bar with Minimal Focus Mode Toggle */}
       <div className="flex items-center justify-between">
@@ -270,7 +272,6 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
             Your words, your mood. Create a quote card for any feeling, chapter, or possibility.
           </p>
         </div>
-
         <button
           onClick={() => setIsMinimalFocusMode(!isMinimalFocusMode)}
           className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-medium border transition-colors hover:bg-stone-100 dark:hover:bg-stone-800"
@@ -291,6 +292,7 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
         style={{ backgroundColor: themeConfig.primary }}>
         <Sliders size={18} /> Create & Style a Quote
       </button>
+      {generationError && !isControlsOpen && <p role="alert" className="lg:hidden rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">{generationError}</p>}
 
       {/* Signature Design Options Showcase Strip */}
       <div 
@@ -406,6 +408,7 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
               </p>
               <textarea
                 id="quote-topic"
+                disabled={isGenerating}
                 ref={topicInputRef}
                 value={userInputPrompt}
                 onChange={(event) => {
@@ -496,6 +499,7 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
             </div>
 
             {/* 4. Generate with AI Button */}
+            {generationError && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">{generationError}</p>}
             <button
               id="btn-generate-quote-ai"
               onClick={handleGenerate}
