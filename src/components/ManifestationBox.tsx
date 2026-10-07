@@ -3,92 +3,47 @@ import { Sparkles, Sprout, ArrowUpRight, Check, Trash2, Bookmark, Download, Wand
 import { ThemeConfig, FONT_CONFIGS, getBackgroundVisual, SANCTUARY_BACKGROUNDS } from '../lib/themeStyles';
 import { BackgroundStyle, FontChoice } from '../types/quote';
 import { ResponsiveSheet } from './BottomSheet';
-import { WritingMethod, ManifestationGuideRequest, MANIFESTATION_FOCUSES } from '../types/manifestation';
+import { WritingMethod, ManifestationGuideRequest, MANIFESTATION_FOCUSES, ManifestationDraft, ManifestationEntry, ManifestationState } from '../types/manifestation';
 import { build369Practice, parseManifestationRequest } from '../lib/aiContracts';
 import { generateManifestationGuide } from '../lib/aiClient';
+import { EMPTY_DRAFT, copyManifestationDraft } from '../lib/manifestationStore';
 
-interface Draft {
-  intention: string;
-  feeling: string;
-  action: string;
-  text: string;
-  focus: string;
-  method: WritingMethod;
-  background: BackgroundStyle;
-  font: FontChoice;
-}
-interface Manifestation extends Draft {
-  id: string;
-  createdAt: string;
-  fulfilled: boolean;
-}
-interface BoxState { draft: Draft; entries: Manifestation[] }
-const STORAGE_KEY = 'scriber_manifestation_box_v1';
+type Draft = ManifestationDraft;
+type Manifestation = ManifestationEntry;
 const METHODS: { id: WritingMethod; name: string; hint: string }[] = [
   { id: 'freewrite', name: 'Free flow', hint: 'No rules. Write what you want to invite into your life.' },
   { id: 'future-self', name: 'Future-self letter', hint: 'Write from the perspective of the person you are becoming.' },
   { id: 'gratitude', name: 'Gratitude scripting', hint: 'Notice what is already here, then imagine what comes next.' },
   { id: '369', name: '3 / 6 / 9 ritual', hint: 'A writing practice: repeat your intention 3 times in the morning, 6 in the afternoon, and 9 at night.' },
 ];
-const EMPTY_DRAFT: Draft = {
-  intention: '', feeling: '', action: '', text: '', focus: 'Personal growth',
-  method: 'freewrite', background: 'aurora-bloom', font: 'hand',
-};
-
-function isDraft(value: unknown): value is Draft {
-  if (!value || typeof value !== 'object') return false;
-  const draft = value as Record<string, unknown>;
-  return ['intention', 'feeling', 'action', 'text', 'focus'].every((key) => typeof draft[key] === 'string')
-    && METHODS.some((method) => method.id === draft.method)
-    && SANCTUARY_BACKGROUNDS.some((background) => background.id === draft.background)
-    && typeof draft.font === 'string' && Object.hasOwn(FONT_CONFIGS, draft.font);
+interface ManifestationBoxProps {
+  themeConfig: ThemeConfig;
+  darkMode: boolean;
+  box: ManifestationState;
+  onChangeBox: (box: ManifestationState) => void;
+  persistenceError: string;
+  syncLabel: string;
 }
-
-function loadBox(): BoxState & { error: string } {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { draft: { ...EMPTY_DRAFT }, entries: [], error: '' };
-    const value: unknown = JSON.parse(raw);
-    if (!value || typeof value !== 'object') throw new Error('Invalid manifestation box');
-    const box = value as Record<string, unknown>;
-    if (!isDraft(box.draft) || !Array.isArray(box.entries) || !box.entries.every((entry) =>
-      isDraft(entry) && 'id' in entry && typeof entry.id === 'string' &&
-      'createdAt' in entry && typeof entry.createdAt === 'string' &&
-      'fulfilled' in entry && typeof entry.fulfilled === 'boolean')) {
-      throw new Error('Invalid manifestation data');
-    }
-    return { draft: box.draft, entries: box.entries, error: '' };
-  } catch (error) {
-    console.error('Unable to restore manifestation box', error);
-    return { draft: { ...EMPTY_DRAFT }, entries: [], error: 'Your saved box could not be loaded. Existing browser data will not be replaced until you make a change.' };
-  }
-}
-
-export function ManifestationBox({ themeConfig, darkMode }: { themeConfig: ThemeConfig; darkMode: boolean }) {
-  const [initial] = useState(loadBox);
-  const [draft, setDraft] = useState<Draft>(initial.draft);
-  const [entries, setEntries] = useState<Manifestation[]>(initial.entries);
-  const [error, setError] = useState(initial.error);
+export const ManifestationBox: React.FC<ManifestationBoxProps> = ({ themeConfig, darkMode, box, onChangeBox, persistenceError, syncLabel }: ManifestationBoxProps) => {
+  const { draft, entries } = box;
+  const setDraft = (update: Draft | ((previous: Draft) => Draft)) => onChangeBox({ ...box, draft: typeof update === 'function' ? update(draft) : update });
+  const setEntries = (update: (previous: Manifestation[]) => Manifestation[]) => onChangeBox({ ...box, entries: update(entries) });
+  const [error, setError] = useState('');
   const [guideError, setGuideError] = useState('');
   const [notice, setNotice] = useState('');
   const [guideOpen, setGuideOpen] = useState(true);
   const [isGuideSheetOpen, setIsGuideSheetOpen] = useState(false);
   const [isGeneratingGuide, setIsGeneratingGuide] = useState(false);
   const draftRevision = useRef(0);
-  useEffect(() => {
-    if (draft === initial.draft && entries === initial.entries) return;
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ draft, entries }));
-      setError('');
-    } catch (storageError) {
-      console.error('Unable to save manifestation box', storageError);
-      setError('Browser storage is unavailable or full. Your changes are not saved; download your writing before leaving.');
-    }
-  }, [draft, entries, initial]);
+  const draftRef = useRef(draft);
+  const activeRef = useRef(true);
+  useEffect(() => { activeRef.current = true; return () => { activeRef.current = false; }; }, []);
+  useEffect(() => { draftRef.current = draft; }, [draft]);
 
   const updateDraft = (changes: Partial<Draft>) => {
     draftRevision.current += 1;
-    setDraft((previous) => ({ ...previous, ...changes }));
+    draftRef.current = copyManifestationDraft({ ...draftRef.current, ...changes });
+    setDraft((previous) => copyManifestationDraft({ ...previous, ...changes }));
     setNotice('');
     setGuideError('');
   };
@@ -124,11 +79,13 @@ export function ManifestationBox({ themeConfig, darkMode }: { themeConfig: Theme
     }
     if (draft.text.trim() && !window.confirm('Replace your current writing with an AI draft? Saved entries will stay in your box.')) return;
     const revision = draftRevision.current;
+    const originalDraft = JSON.stringify(draft);
     setGuideError('');
     setIsGeneratingGuide(true);
     try {
       const result = await generateManifestationGuide(request);
-      if (draftRevision.current !== revision) {
+      if (!activeRef.current) return;
+      if (draftRevision.current !== revision || JSON.stringify(draftRef.current) !== originalDraft) {
         setGuideError('Your draft changed while AI was writing. The response was not applied so your edits are preserved. Please try again.');
         return;
       }
@@ -136,10 +93,11 @@ export function ManifestationBox({ themeConfig, darkMode }: { themeConfig: Theme
       setNotice('AI draft created. Read it, reflect, and make it your own before saving.');
       setIsGuideSheetOpen(false);
     } catch (generationError) {
+      if (!activeRef.current) return;
       console.error('Manifestation generation failed', { message: generationError instanceof Error ? generationError.message : 'Unknown error' });
       setGuideError(generationError instanceof Error ? generationError.message : 'AI generation failed. Your writing has been preserved.');
     } finally {
-      setIsGeneratingGuide(false);
+      if (activeRef.current) setIsGeneratingGuide(false);
     }
   };
   const saveEntry = (event: React.FormEvent) => {
@@ -172,10 +130,11 @@ export function ManifestationBox({ themeConfig, darkMode }: { themeConfig: Theme
           <h1 className="font-display text-3xl sm:text-5xl font-bold">The manifestation box<span style={{ color: themeConfig.accent }}>.</span></h1>
           <p className="text-sm mt-3 max-w-xl text-stone-600 dark:text-stone-300">Dream it. Write it. Take one small step. This is your private place to turn possibilities into intentions.</p>
         </div>
-        <span className="text-xs rounded-full px-4 py-2 border" style={panelStyle}>Saved on this device · No cloud sync</span>
+        <span className="text-xs rounded-full px-4 py-2 border" style={panelStyle}>{syncLabel}</span>
       </section>
       <div role="status" aria-live="polite" className="text-sm">{notice}</div>
       {error && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 text-red-800 p-3 text-sm">{error}</p>}
+      {persistenceError && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 text-red-800 p-3 text-sm">{persistenceError}</p>}
       {guideError && !isGuideSheetOpen && <p role="alert" className="lg:hidden rounded-xl border border-red-300 bg-red-50 text-red-800 p-3 text-sm">{guideError}</p>}
       <button type="button" onClick={() => setIsGuideSheetOpen(true)} aria-haspopup="dialog"
         className="lg:hidden flex items-center justify-center gap-2 w-full min-h-12 rounded-2xl px-5 py-3 text-sm font-semibold text-white"
@@ -191,6 +150,7 @@ export function ManifestationBox({ themeConfig, darkMode }: { themeConfig: Theme
           <div className="rounded-xl bg-violet-50 text-violet-900 p-3 text-xs leading-relaxed">
             <strong>Your AI writing guide</strong><br />AI uses your intention, feeling, action, focus, and writing method to create a personalized draft. These fields are sent to Gemini only when you choose AI. Offline templates stay on your device.
           </div>
+          {persistenceError && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 text-red-800 p-3 text-sm">{persistenceError}</p>}
           {guideOpen && <div id="manifest-guide" className="space-y-4">
             <label className="block text-xs font-semibold">What are you inviting in?
               <input className={`${inputClass} mt-2`} value={draft.intention} onChange={(event) => updateDraft({ intention: event.target.value })} maxLength={180} placeholder="A creative career that feels like me" />

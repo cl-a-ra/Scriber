@@ -18,3 +18,26 @@ export interface GeneratedManifestationGuide {
   text: string;
   reflectionPrompts: string[];
 }
+
+export interface ManifestationDraft {
+  intention: string;
+  feeling: string;
+  action: string;
+  text: string;
+  focus: string;
+  method: WritingMethod;
+  background: BackgroundStyle;
+  font: FontChoice;
+}
+
+export interface ManifestationEntry extends ManifestationDraft {
+  id: string;
+  createdAt: string;
+  fulfilled: boolean;
+}
+
+export interface ManifestationState {
+  draft: ManifestationDraft;
+  entries: ManifestationEntry[];
+}
+import type { BackgroundStyle, FontChoice } from './quote';

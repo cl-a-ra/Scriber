@@ -1,28 +1,7 @@
-import { QuoteItem, QuoteFeedback, ThemeColorPreset, FontChoice } from '../types/quote';
+import { QuoteItem, QuoteFeedback } from '../types/quote';
 import { INITIAL_CURATED_QUOTES } from './cycleThemes';
-import { 
-  db, 
-  auth, 
-  User, 
-  signInWithPopup, 
-  signInAnonymously, 
-  signOut, 
-  googleProvider,
-  onAuthStateChanged 
-} from './firebase';
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
-  getDocs, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  limit, 
-  updateDoc, 
-  increment 
-} from 'firebase/firestore';
+import { DEFAULT_PREFERENCES, parsePreferences, type UserPreferences } from './preferences';
+export { DEFAULT_PREFERENCES, type UserPreferences } from './preferences';
 
 const LOCAL_QUOTES_KEY = 'scriber_local_quotes_v1';
 const SAVED_IDS_KEY = 'scriber_saved_ids_v1';
@@ -30,28 +9,16 @@ const LIKED_IDS_KEY = 'scriber_liked_ids_v1';
 const FEEDBACKS_KEY = 'scriber_feedbacks_v1';
 const PREFS_KEY = 'scriber_user_prefs_v1';
 
-export interface UserPreferences {
-  themeColor: ThemeColorPreset;
-  fontChoice: FontChoice;
-  darkMode: boolean;
-  dailyNotificationEnabled: boolean;
-  notificationTime: string; // e.g. "09:00"
+export function scopedStorageKey(key: string, userId: string | null): string {
+  return userId ? `${key}:user:${userId}` : key;
 }
 
-export const DEFAULT_PREFERENCES: UserPreferences = {
-  themeColor: 'lavender-pop',
-  fontChoice: 'fraunces',
-  darkMode: false,
-  dailyNotificationEnabled: false,
-  notificationTime: '09:00',
-};
-
 // Safe LocalStorage helpers
-export function loadLocalPreferences(): UserPreferences {
+export function loadLocalPreferences(userId: string | null = null): UserPreferences {
   try {
-    const raw = localStorage.getItem(PREFS_KEY);
+    const raw = localStorage.getItem(scopedStorageKey(PREFS_KEY, userId));
     if (raw) {
-      return { ...DEFAULT_PREFERENCES, ...JSON.parse(raw) };
+      return parsePreferences({ ...DEFAULT_PREFERENCES, ...JSON.parse(raw) });
     }
   } catch (e) {
     console.warn('Unable to load preferences from localStorage', e);
@@ -59,57 +26,49 @@ export function loadLocalPreferences(): UserPreferences {
   return DEFAULT_PREFERENCES;
 }
 
-export function saveLocalPreferences(prefs: UserPreferences): void {
+export function saveLocalPreferences(prefs: UserPreferences, userId: string | null = null): void {
+  localStorage.setItem(scopedStorageKey(PREFS_KEY, userId), JSON.stringify(prefs));
+}
+
+export function loadSavedQuoteIds(userId: string | null = null, strict = false): string[] {
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    const raw = localStorage.getItem(scopedStorageKey(SAVED_IDS_KEY, userId));
+    const ids: unknown = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(ids) || !ids.every((id) => typeof id === 'string')) throw new Error('Invalid saved quote list.');
+    return ids;
   } catch (e) {
-    console.warn('Unable to save preferences to localStorage', e);
+    console.warn('Unable to restore saved quotes', { name: e instanceof Error ? e.name : 'Unknown error' });
+    if (strict) throw new Error('Guest bookmarks could not be restored. Existing guest data is unchanged; restore the bookmark list before importing.');
+    return [];
   }
 }
 
-export function loadSavedQuoteIds(): string[] {
+export function saveSavedQuoteIds(ids: string[], userId: string | null = null): void {
+  localStorage.setItem(scopedStorageKey(SAVED_IDS_KEY, userId), JSON.stringify(ids));
+}
+
+export function loadLikedQuoteIds(userId: string | null = null): string[] {
   try {
-    const raw = localStorage.getItem(SAVED_IDS_KEY);
+    const raw = localStorage.getItem(scopedStorageKey(LIKED_IDS_KEY, userId));
     return raw ? JSON.parse(raw) : [];
   } catch (e) {
     return [];
   }
 }
 
-export function saveSavedQuoteIds(ids: string[]): void {
-  try {
-    localStorage.setItem(SAVED_IDS_KEY, JSON.stringify(ids));
-  } catch (e) {
-    console.warn('Failed to save quote ids to localStorage', e);
-  }
+export function saveLikedQuoteIds(ids: string[], userId: string | null = null): void {
+  localStorage.setItem(scopedStorageKey(LIKED_IDS_KEY, userId), JSON.stringify(ids));
 }
 
-export function loadLikedQuoteIds(): string[] {
+export function loadLocalQuotes(userId: string | null = null): QuoteItem[] {
   try {
-    const raw = localStorage.getItem(LIKED_IDS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch (e) {
-    return [];
-  }
-}
-
-export function saveLikedQuoteIds(ids: string[]): void {
-  try {
-    localStorage.setItem(LIKED_IDS_KEY, JSON.stringify(ids));
-  } catch (e) {
-    console.warn('Failed to save liked ids', e);
-  }
-}
-
-export function loadLocalQuotes(): QuoteItem[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_QUOTES_KEY);
+    const raw = localStorage.getItem(scopedStorageKey(LOCAL_QUOTES_KEY, userId));
     if (raw) {
       const parsed: QuoteItem[] = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
         const curated = new Map(INITIAL_CURATED_QUOTES.map((quote) => [quote.id, quote]));
         return [
-          ...parsed.map((quote) => curated.get(quote.id) || quote),
+          ...parsed.map((quote) => userId ? quote : curated.get(quote.id) || quote),
           ...INITIAL_CURATED_QUOTES.filter((quote) => !parsed.some((stored) => stored.id === quote.id)),
         ];
       }
@@ -120,27 +79,19 @@ export function loadLocalQuotes(): QuoteItem[] {
   return INITIAL_CURATED_QUOTES;
 }
 
-export function saveLocalQuotes(quotes: QuoteItem[]): void {
-  try {
-    localStorage.setItem(LOCAL_QUOTES_KEY, JSON.stringify(quotes));
-  } catch (e) {
-    console.warn('Failed to save quotes to localStorage', e);
-  }
+export function saveLocalQuotes(quotes: QuoteItem[], userId: string | null = null): void {
+  localStorage.setItem(scopedStorageKey(LOCAL_QUOTES_KEY, userId), JSON.stringify(quotes));
 }
 
-export function loadLocalFeedbacks(): Record<string, QuoteFeedback[]> {
+export function loadLocalFeedbacks(userId: string | null = null): Record<string, QuoteFeedback[]> {
   try {
-    const raw = localStorage.getItem(FEEDBACKS_KEY);
+    const raw = localStorage.getItem(scopedStorageKey(FEEDBACKS_KEY, userId));
     return raw ? JSON.parse(raw) : {};
   } catch (e) {
     return {};
   }
 }
 
-export function saveLocalFeedbacks(feedbacks: Record<string, QuoteFeedback[]>): void {
-  try {
-    localStorage.setItem(FEEDBACKS_KEY, JSON.stringify(feedbacks));
-  } catch (e) {
-    console.warn('Failed to save feedbacks to localStorage', e);
-  }
+export function saveLocalFeedbacks(feedbacks: Record<string, QuoteFeedback[]>, userId: string | null = null): void {
+  localStorage.setItem(scopedStorageKey(FEEDBACKS_KEY, userId), JSON.stringify(feedbacks));
 }

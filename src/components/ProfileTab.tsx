@@ -24,11 +24,14 @@ interface ProfileTabProps {
   onNavigate: (tab: SanctuaryTab) => void;
   savedCount: number;
   likedCount: number;
+  syncLabel: string;
+  onSync: () => void;
+  onImportGuest: () => void;
 }
 
 export const ProfileTab: React.FC<ProfileTabProps> = ({
   user, profile, onProfileSaved, accountError, accountBusy, onSignIn, onSignOut, preferences, themeConfig, darkMode,
-  onToggleDarkMode, onOpenThemeSettings, onOpenAffirmationSettings, onNavigate, savedCount, likedCount,
+  onToggleDarkMode, onOpenThemeSettings, onOpenAffirmationSettings, onNavigate, savedCount, likedCount, syncLabel, onSync, onImportGuest,
 }: ProfileTabProps) => {
   const [draft, setDraft] = useState(profile);
   const [editError, setEditError] = useState('');
@@ -85,7 +88,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
       const saved = saveLocalProfile(user?.uid || null, draft);
       onProfileSaved(saved);
       setIsEditing(false);
-      setNotice('Profile saved on this device.');
+      setNotice(user ? 'Profile saved on this device. Private cloud sync runs in the background.' : 'Profile saved on this device.');
     } catch (saveError) {
       console.error('Local profile save failed', { name: saveError instanceof Error ? saveError.name : 'Unknown error' });
       setEditError(saveError instanceof Error && saveError.name !== 'QuotaExceededError'
@@ -112,7 +115,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
           <p className="text-sm mt-2 whitespace-pre-line break-words text-stone-600 dark:text-stone-300">{profile.bio || 'Your words, your dreams, your own way of becoming. Add a bio to make this space yours.'}</p>
           {photoFailed && <p role="alert" className="text-xs mt-2 text-red-700 dark:text-red-300">Your profile picture could not load. Choose a new picture or use your initials.</p>}
           <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 mt-4 text-[11px] font-semibold" style={{ backgroundColor: themeConfig.accentBg, color: themeConfig.primary }}><UserRound size={13} />{user ? 'Google account connected' : 'Guest profile'}</span>
-          <p className="text-xs text-stone-500 dark:text-stone-300 mt-3">Your photo, bio, and Scriber display name are saved on this device only. They do not change your Google account.</p>
+          <p className="text-xs text-stone-500 dark:text-stone-300 mt-3">{user ? 'Your profile syncs privately to your account, with a device copy for offline use.' : 'Your guest photo, bio, and Scriber display name are saved on this device only.'} They do not change your Google account.</p>
         </div>
       </section>
 
@@ -143,10 +146,18 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
         {user ? <>
           <div className="flex items-start gap-3 min-w-0"><Mail size={18} className="shrink-0 mt-1" /><div className="min-w-0"><span className="block text-xs text-stone-500 dark:text-stone-300">Google account email</span><span className="block text-sm font-semibold break-all mt-1">{user.email || 'No email was provided by Google'}</span></div></div>
           <div className="flex flex-wrap gap-2 text-[11px]"><span className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 bg-green-100 text-green-900"><Check size={12} />Signed in with Google</span>{user.email && <span className="rounded-full px-3 py-1.5 border" style={{ borderColor: panelStyle.borderColor }}>{user.emailVerified ? 'Email verified' : 'Email not verified'}</span>}</div>
-          <p className="text-xs text-stone-500 dark:text-stone-300">Your email is managed by Google. Scriber does not store a password. Local profile edits are not cloud-synced yet.</p>
+          <p className="text-xs text-stone-500 dark:text-stone-300">Your email is managed by Google. Scriber does not store a password. Generated quotes, profile edits, and manifestations stay private to your account.</p>
+          <div className="rounded-2xl border p-4 space-y-3" style={{ borderColor: panelStyle.borderColor }}>
+            <p role="status" className="text-xs">{syncLabel}</p>
+            <button type="button" onClick={onSync} className="min-h-11 text-sm font-semibold underline">Sync now / retry</button>
+            <p className="text-xs text-stone-500 dark:text-stone-300">Guest data stays separate. Import only writing that belongs to you. Account profile and theme settings are not replaced; an existing account draft is kept.</p>
+            <button type="button" onClick={onImportGuest} className="min-h-11 rounded-full border px-4 text-xs font-semibold" style={{ borderColor: panelStyle.borderColor }}>Import guest writing & saved quotes</button>
+          </div>
           <button type="button" onClick={onSignOut} disabled={accountBusy} className="inline-flex items-center gap-2 min-h-11 rounded-full border px-5 py-3 text-sm font-semibold disabled:opacity-60" style={{ borderColor: panelStyle.borderColor }}><LogOut size={16} />{accountBusy ? 'Please wait...' : 'Sign out'}</button>
+          <p className="text-xs text-stone-500 dark:text-stone-300">Signing out hides this account, but keeps its offline cache on this device. Clear site data when leaving a shared device.</p>
         </> : <>
           <p className="text-sm text-stone-600 dark:text-stone-300">Make this space yours without an account, or connect Google to show your account email and Google photo.</p>
+          <p className="text-xs text-stone-500 dark:text-stone-300">Signing into Firebase Console does not sign you into Scriber. Chrome, Edge, and VS Code's browser have separate sign-in sessions. If Google's window keeps closing here, open Scriber directly in Chrome or Edge.</p>
           <button type="button" onClick={onSignIn} disabled={accountBusy} className="inline-flex items-center justify-center gap-2 min-h-12 rounded-full px-5 py-3 text-sm font-semibold text-white disabled:opacity-60" style={{ backgroundColor: themeConfig.primary }}><LogIn size={16} />{accountBusy ? 'Connecting...' : 'Continue with Google'}</button>
         </>}
         {accountError && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">{accountError}</p>}
@@ -165,7 +176,7 @@ export const ProfileTab: React.FC<ProfileTabProps> = ({
               {user?.photoURL && <button type="button" disabled={isPreparingPhoto} onClick={() => setDraft((previous) => ({ ...previous, photoData: null, useAccountPhoto: true }))} className="block text-xs underline min-h-11 px-2">Use Google picture</button>}
             </div>
           </div>
-          <p className="text-xs text-stone-500 dark:text-stone-300">JPG, PNG, or WebP. Up to 5 MB. Center-cropped and resized to 256 x 256. Nothing is uploaded.</p>
+          <p className="text-xs text-stone-500 dark:text-stone-300">JPG, PNG, or WebP. Up to 5 MB. Center-cropped and resized to 256 x 256. {user ? 'Uploaded privately when you save; queued on this device while offline.' : 'Saved on this device. Sign in to use private cloud saving.'}</p>
           <label className="block text-xs font-semibold">Scriber display name<input value={draft.displayName} onChange={(event) => setDraft((previous) => ({ ...previous, displayName: event.target.value }))} maxLength={100} required className="mt-2 w-full rounded-xl border px-3 py-3 bg-transparent" style={{ borderColor: panelStyle.borderColor }} /></label>
           <label className="block text-xs font-semibold">Bio<textarea value={draft.bio} onChange={(event) => setDraft((previous) => ({ ...previous, bio: event.target.value }))} maxLength={280} rows={4} placeholder="A little about you, your inspirations, and what you are becoming..." className="mt-2 w-full rounded-xl border px-3 py-3 text-base resize-y bg-transparent" style={{ borderColor: panelStyle.borderColor }} /></label>
           <p className="text-xs text-stone-500 dark:text-stone-300">{draft.bio.length}/280 characters. Saved on this device</p>

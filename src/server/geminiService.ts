@@ -38,7 +38,7 @@ async function generateJson(systemInstruction: string, input: object, schema: Sc
   client ??= new GoogleGenAI({ apiKey: key });
   try {
     const response = await client.models.generateContent({
-      model: process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash',
+      model: process.env.GEMINI_MODEL?.trim() || 'gemini-3.8-flash',
       contents: JSON.stringify(input),
       config: {
         systemInstruction,
@@ -54,6 +54,12 @@ async function generateJson(systemInstruction: string, input: object, schema: Sc
     }
   } catch (error) {
     if (error instanceof ApiError) throw error;
+    if (error instanceof GeminiApiError && error.status === 404) {
+      throw new ApiError(503, 'AI_MODEL_UNAVAILABLE', 'The configured AI model is unavailable for this account. The server GEMINI_MODEL setting needs updating.');
+    }
+    if (error instanceof GeminiApiError && error.status === 503) {
+      throw new ApiError(503, 'AI_BUSY', 'The AI model is experiencing high demand. Please try again shortly.');
+    }
     if (error instanceof GeminiApiError && error.status === 429) {
       throw new ApiError(429, 'AI_QUOTA_EXCEEDED', 'AI is busy or its quota has been reached. Please try again later.');
     }

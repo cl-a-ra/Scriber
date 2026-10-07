@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: scriber
+    runtime: node
+    plan: free
+    branch: main
+    autoDeployTrigger: commit
+    buildCommand: NODE_ENV=development bun install --frozen-lockfile && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "24.19.0"
+      - key: HOST
+        value: "0.0.0.0"
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: GEMINI_MODEL
+        value: gemini-3.1-flash-lite
+      - key: GEMINI_API_KEY
+        sync: false

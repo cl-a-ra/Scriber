@@ -4,7 +4,7 @@ import 'dotenv/config';
 import { createApiApp } from './src/server/app';
 
 const app = createApiApp();
-const portText = process.env.PORT || '3000';
+const portText = process.env.PORT || '3010';
 if (!/^\d+$/.test(portText) || Number(portText) < 1 || Number(portText) > 65535) {
   throw new Error('PORT must be an integer between 1 and 65535.');
 }

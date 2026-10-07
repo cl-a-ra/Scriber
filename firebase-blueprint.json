@@ -2,7 +2,7 @@
   "entities": {
     "UserProfile": {
       "title": "UserProfile",
-      "description": "User profile with theme preferences, customizable typography and dark mode settings",
+      "description": "Owner-only profile with an optimized photo, bio and account preferences; creation time is preserved on updates",
       "type": "object",
       "properties": {
         "uid": {
@@ -14,15 +14,10 @@
         "email": {
           "type": "string"
         },
-        "themeColor": {
-          "type": "string"
-        },
-        "fontChoice": {
-          "type": "string"
-        },
-        "darkMode": {
-          "type": "boolean"
-        },
+        "bio": { "type": "string", "maxLength": 280 },
+        "photoData": { "type": ["string", "null"], "maxLength": 200000 },
+        "useAccountPhoto": { "type": "boolean" },
+        "preferences": { "$ref": "#/entities/UserPreferences" },
         "createdAt": {
           "type": "string"
         },
@@ -30,11 +25,51 @@
           "type": "string"
         }
       },
-      "required": ["uid", "displayName", "themeColor", "fontChoice", "darkMode", "createdAt", "updatedAt"]
+      "required": ["uid", "email", "displayName", "bio", "photoData", "useAccountPhoto", "preferences", "createdAt", "updatedAt"]
+    },
+    "UserPreferences": {
+      "type": "object",
+      "properties": {
+        "themeColor": { "type": "string" },
+        "fontChoice": { "type": "string" },
+        "darkMode": { "type": "boolean" },
+        "dailyNotificationEnabled": { "type": "boolean" },
+        "notificationTime": { "type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" }
+      },
+      "required": ["themeColor", "fontChoice", "darkMode", "dailyNotificationEnabled", "notificationTime"],
+      "additionalProperties": false
+    },
+    "ManifestationDraft": {
+      "type": "object",
+      "properties": {
+        "intention": { "type": "string", "maxLength": 1000 },
+        "feeling": { "type": "string", "maxLength": 1000 },
+        "action": { "type": "string", "maxLength": 1000 },
+        "text": { "type": "string", "maxLength": 100000 },
+        "focus": { "type": "string" },
+        "method": { "type": "string", "enum": ["freewrite", "future-self", "gratitude", "369"] },
+        "background": { "type": "string" },
+        "font": { "type": "string" }
+      },
+      "required": ["intention", "feeling", "action", "text", "focus", "method", "background", "font"]
+    },
+    "ManifestationEntry": {
+      "allOf": [
+        { "$ref": "#/entities/ManifestationDraft" },
+        {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "createdAt": { "type": "string" },
+            "fulfilled": { "type": "boolean" }
+          },
+          "required": ["id", "createdAt", "fulfilled"]
+        }
+      ]
     },
     "Quote": {
       "title": "Quote",
-      "description": "Artistic quote with typography styling, reggae/gen-z aesthetic, and loc hair wisdom",
+      "description": "Quote about any topic with typography and artwork; generated quotes are private until explicitly shared",
       "type": "object",
       "properties": {
         "id": {
@@ -70,6 +105,9 @@
         "sixHourCycle": {
           "type": "string"
         },
+        "highlightWords": { "type": "array", "items": { "type": "string" }, "maxItems": 4 },
+        "vibeBadge": { "type": "string" },
+        "notes": { "type": "string", "maxLength": 2000 },
         "createdAt": {
           "type": "string"
         }
@@ -112,9 +150,21 @@
       "schema": "Quote",
       "description": "User's personal saved collection of favorite quotes and inspiration"
     },
+    "/users/{userId}/quotes/{quoteId}": {
+      "schema": "Quote",
+      "description": "Owner-only generated quote library"
+    },
+    "/users/{userId}/manifestation_drafts/current": {
+      "schema": "ManifestationDraft",
+      "description": "Owner-only working draft, queued locally while offline"
+    },
+    "/users/{userId}/manifestations/{entryId}": {
+      "schema": "ManifestationEntry",
+      "description": "Owner-only saved manifestations and fulfillment progress"
+    },
     "/public_quotes/{quoteId}": {
       "schema": "Quote",
-      "description": "Public trending and community quotes searchable by category like locs hair and reggae vibes"
+      "description": "Public inspiration and community quotes; personal AI generation is not automatically published here"
     },
     "/public_quotes/{quoteId}/feedbacks/{feedbackId}": {
       "schema": "QuoteFeedback",

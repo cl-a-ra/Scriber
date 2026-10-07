@@ -271,6 +271,7 @@ export const QuoteStudio: React.FC<QuoteStudioProps> = ({
           <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 font-body">
             Your words, your mood. Create a quote card for any feeling, chapter, or possibility.
           </p>
+          <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">Generated quotes stay private. Sharing or exporting is always your choice.</p>
         </div>
         <button
           onClick={() => setIsMinimalFocusMode(!isMinimalFocusMode)}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { 
   Search, 
   Filter, 
@@ -41,42 +41,27 @@ import {
   saveLocalFeedbacks, 
   UserPreferences 
 } from './lib/quoteStore';
-import { 
-  auth, 
-  db, 
-  signInWithPopup, 
-  signOut, 
-  googleProvider, 
-  onAuthStateChanged, 
-  User
-} from './lib/firebase';
-import { 
-  collection, 
-  doc, 
-  getDoc,
-  setDoc, 
-  deleteDoc, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  limit, 
-  updateDoc, 
-  increment 
-} from 'firebase/firestore';
+import type { User } from 'firebase/auth';
+import { getFirebaseClient, usingFirebaseEmulators } from './lib/firebaseClient';
 
 import { Navbar } from './components/Navbar';
 import { SixHourTrendingBanner } from './components/SixHourTrendingBanner';
-import { QuoteStudio } from './components/QuoteStudio';
 import { QuoteCard } from './components/QuoteCard';
-import { ThemeCustomizerModal } from './components/ThemeCustomizerModal';
-import { FeedbackModal } from './components/FeedbackModal';
-import { DailyAffirmationModal } from './components/DailyAffirmationModal';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
-import { ManifestationBox } from './components/ManifestationBox';
 import { generateQuote } from './lib/aiClient';
-import { ProfileTab } from './components/ProfileTab';
 import { WelcomeCard } from './components/WelcomeCard';
-import { loadLocalProfile } from './lib/profileStore';
+import { loadLocalProfile, saveLocalProfile } from './lib/profileStore';
+import { CloudSync, SyncStatus } from './lib/cloudSync';
+import { CloudMutation, validateMutation } from './lib/cloudContracts';
+import { loadManifestationState, saveManifestationState } from './lib/manifestationStore';
+import { ManifestationState } from './types/manifestation';
+
+const QuoteStudio = lazy(() => import('./components/QuoteStudio').then((module) => ({ default: module.QuoteStudio })));
+const ManifestationBox = lazy(() => import('./components/ManifestationBox').then((module) => ({ default: module.ManifestationBox })));
+const ProfileTab = lazy(() => import('./components/ProfileTab').then((module) => ({ default: module.ProfileTab })));
+const ThemeCustomizerModal = lazy(() => import('./components/ThemeCustomizerModal').then((module) => ({ default: module.ThemeCustomizerModal })));
+const FeedbackModal = lazy(() => import('./components/FeedbackModal').then((module) => ({ default: module.FeedbackModal })));
+const DailyAffirmationModal = lazy(() => import('./components/DailyAffirmationModal').then((module) => ({ default: module.DailyAffirmationModal })));
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<SanctuaryTab>('studio');
@@ -91,8 +76,25 @@ export default function App() {
   const [accountError, setAccountError] = useState('');
   const [cloudSyncError, setCloudSyncError] = useState('');
   const [accountBusy, setAccountBusy] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [isCloudSynced, setIsCloudSynced] = useState<boolean>(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ state: 'pending', pending: 0, error: '' });
+  const [manifestation, setManifestation] = useState(() => loadManifestationState(null));
+  const manifestationRef = useRef(manifestation);
+  const scopeRef = useRef<string | null>(null);
+  const cloudRef = useRef<CloudSync | null>(null);
+  const hasHydratedRef = useRef(false);
+  const publicQuotesRef = useRef<QuoteItem[]>([]);
+  const privateQuoteIdsRef = useRef<Set<string>>(new Set());
+  const publicQuoteIdsRef = useRef<Set<string>>(new Set());
+  const [importNotice, setImportNotice] = useState('');
+  const cacheErrorsRef = useRef({ profile: '', box: '' });
+  const syncLabel = !user ? 'Saved on this device. Sign in for private cloud sync.'
+    : syncStatus.state === 'synced' ? 'Private cloud synced'
+    : syncStatus.state === 'offline' ? 'Offline. Device copy kept; sync resumes online.'
+    : syncStatus.state === 'error' ? 'Cloud sync needs attention. Device copy kept.'
+    : `Private cloud sync ${syncStatus.state === 'syncing' ? 'in progress' : 'pending'}${syncStatus.pending ? ` (${syncStatus.pending})` : ''}`;
 
   // Quotes data & interactions
   const [quotes, setQuotes] = useState<QuoteItem[]>(() => loadLocalQuotes());
@@ -136,67 +138,133 @@ export default function App() {
 
   // 2. Listen to Network Online/Offline events
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    const handleOnline = () => { setIsOnline(true); void cloudRef.current?.sync(); };
+    const handleOffline = () => { setIsOnline(false); setIsCloudSynced(false); void cloudRef.current?.sync(); };
+    const handleFocus = () => { void cloudRef.current?.sync(); };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    window.addEventListener('focus', handleFocus);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
   // 3. Listen to Firebase Auth state
   useEffect(() => {
-    let active = true;
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    let disposed = false;
+    let unsubscribe = () => {};
+    void getFirebaseClient().then(({ auth, db, onAuthStateChanged }) => {
+      if (disposed) return;
+      unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setAuthReady(true);
+      cloudRef.current?.stop();
+      cloudRef.current = null;
+      hasHydratedRef.current = false;
+      const userId = currentUser?.uid || null;
+      scopeRef.current = userId;
       setUser(currentUser);
-      setLocalProfile(loadLocalProfile(currentUser?.uid || null, currentUser?.displayName || 'Scriber Muse'));
+      const deviceProfile = loadLocalProfile(userId, currentUser?.displayName?.trim().slice(0, 100) || 'Scriber Muse');
+      const deviceBox = loadManifestationState(userId);
+      cacheErrorsRef.current = { profile: deviceProfile.error, box: deviceBox.error };
+      setLocalProfile(deviceProfile);
+      setManifestation(deviceBox);
+      manifestationRef.current = deviceBox;
+      const devicePreferences = loadLocalPreferences(userId);
+      setPreferences(devicePreferences);
+      setDarkMode(devicePreferences.darkMode);
+      const deviceQuotes = loadLocalQuotes(userId);
+      setQuotes(deviceQuotes);
+      setStudioQuote(deviceQuotes[0] || INITIAL_CURATED_QUOTES[0]);
+      studioQuoteRef.current = deviceQuotes[0] || INITIAL_CURATED_QUOTES[0];
+      setSavedIds(loadSavedQuoteIds(userId));
+      setLikedIds(loadLikedQuoteIds(userId));
+      setFeedbacks(loadLocalFeedbacks(userId));
+      privateQuoteIdsRef.current = new Set();
+      setGenerationError('');
+      setActiveFeedbackQuote(null);
+      setIsThemeModalOpen(false);
+      setIsAffirmationModalOpen(false);
+      setImportNotice('');
       setIsCloudSynced(false);
+      setSyncStatus({ state: 'pending', pending: 0, error: '' });
       setCloudSyncError('');
+      setAccountError('');
       if (currentUser) {
-        // Sync user profile to Firestore
+        let migratedLegacyProfile = false;
         try {
-          const userDocRef = doc(db, 'users', currentUser.uid);
-          const existingProfile = await getDoc(userDocRef);
-          if (!active || auth.currentUser?.uid !== currentUser.uid) return;
-          await setDoc(userDocRef, {
-            uid: currentUser.uid,
-            displayName: currentUser.displayName || 'Scriber Muse',
-            email: currentUser.email || '',
-            themeColor: preferences.themeColor,
-            fontChoice: preferences.fontChoice,
-            darkMode: preferences.darkMode,
-            ...(!existingProfile.exists() ? { createdAt: new Date().toISOString() } : {}),
-            updatedAt: new Date().toISOString(),
-          }, { merge: true });
-          if (active && auth.currentUser?.uid === currentUser.uid) {
-            setIsCloudSynced(true);
-            setCloudSyncError('');
-          }
-        } catch (err) {
-          console.warn('Could not sync user profile to cloud', err);
-          if (active && auth.currentUser?.uid === currentUser.uid) {
-            setIsCloudSynced(false);
-            setCloudSyncError('You are signed in, but cloud preferences could not sync. Your profile photo and bio remain device-local.');
-          }
+          const adapter = () => import('./lib/firebaseCloud').then(({ createFirebaseCloud }) => createFirebaseCloud(currentUser, deviceProfile.profile, { auth, db }));
+          const sync = new CloudSync({
+            userId: currentUser.uid, adapter: {
+              load: async () => (await adapter()).load(),
+              apply: async (mutation) => (await adapter()).apply(mutation),
+            }, storage: localStorage,
+            isOnline: () => navigator.onLine, isCurrentUser: () => scopeRef.current === currentUser.uid && auth.currentUser?.uid === currentUser.uid,
+            onStatus: (status) => { setSyncStatus(status); setIsCloudSynced(status.state === 'synced'); setCloudSyncError(status.error); },
+            onHydrate: (snapshot) => {
+              hasHydratedRef.current = true;
+              if (snapshot.profileIsLegacy && !migratedLegacyProfile) {
+                migratedLegacyProfile = true;
+                sync.enqueue({ kind: 'profile', profile: snapshot.profile, preferences: snapshot.preferences });
+              }
+              setLocalProfile({ profile: snapshot.profile, error: cacheErrorsRef.current.profile });
+              setPreferences(snapshot.preferences);
+              setDarkMode(snapshot.preferences.darkMode);
+              privateQuoteIdsRef.current = new Set(snapshot.quotes.map((quote) => quote.id));
+              const merged = new Map<string, QuoteItem>();
+              [...INITIAL_CURATED_QUOTES, ...publicQuotesRef.current, ...snapshot.quotes].forEach((quote) => merged.set(quote.id, quote));
+              const accountQuotes = [...merged.values()];
+              setQuotes(accountQuotes);
+              setSavedIds(snapshot.savedIds);
+              const box = { ...snapshot.box, error: cacheErrorsRef.current.box };
+              manifestationRef.current = box;
+              setManifestation(box);
+              try {
+                if (!cacheErrorsRef.current.profile) saveLocalProfile(currentUser.uid, snapshot.profile);
+                if (!cacheErrorsRef.current.box) saveManifestationState(currentUser.uid, snapshot.box);
+                saveLocalPreferences(snapshot.preferences, currentUser.uid);
+                saveLocalQuotes(accountQuotes, currentUser.uid);
+                saveSavedQuoteIds(snapshot.savedIds, currentUser.uid);
+              } catch (error) {
+                console.error('Private cache save failed', { name: error instanceof Error ? error.name : 'Unknown error' });
+                setAccountError('Your cloud data loaded, but this device could not keep an offline copy. Check available storage.');
+              }
+            },
+          });
+          cloudRef.current = sync;
+          void sync.sync();
+        } catch (error) {
+          console.error('Private sync could not start', { name: error instanceof Error ? error.name : 'Unknown error' });
+          const message = 'Your pending-sync data could not be read. Existing device data is preserved; cloud syncing is paused.';
+          setSyncStatus({ state: 'error', pending: 0, error: message });
+          setCloudSyncError(message);
         }
       }
+      });
+    }).catch((error) => {
+      console.error('Account services could not load', { name: error instanceof Error ? error.name : 'Unknown error' });
+      setAuthReady(true);
+      setAccountError('Account services could not load. Your device data is unchanged; check your connection and reload to restore cloud access.');
     });
-    return () => { active = false; unsubscribe(); };
-  }, [preferences]);
+    return () => { disposed = true; unsubscribe(); cloudRef.current?.stop(); };
+  }, []);
 
   // 4. Firestore real-time sync for public quotes & saved quotes
   useEffect(() => {
     if (!isOnline) return;
-
+    let disposed = false;
+    let unsubscribe = () => {};
+    void Promise.all([getFirebaseClient(), import('firebase/firestore')]).then(([{ db }, firestore]) => {
+    if (disposed) return;
+    const { collection, query, orderBy, limit, onSnapshot } = firestore;
     try {
       const quotesCol = collection(db, 'public_quotes');
       const q = query(quotesCol, orderBy('createdAt', 'desc'), limit(50));
       
-      const unsubscribe = onSnapshot(q, (snapshot) => {
+      unsubscribe = onSnapshot(q, (snapshot) => {
         if (!snapshot.empty) {
           const cloudQuotes: QuoteItem[] = [];
           snapshot.forEach((docSnap) => {
@@ -217,6 +285,8 @@ export default function App() {
               vibeBadge: data.vibeBadge || '',
               ...(typeof data.notes === 'string' ? { notes: data.notes } : {}),
             });
+            publicQuotesRef.current = cloudQuotes;
+            publicQuoteIdsRef.current = new Set(cloudQuotes.map((quote) => quote.id));
           });
 
           // Merge cloud quotes with curated initial quotes
@@ -224,9 +294,9 @@ export default function App() {
             const map = new Map<string, QuoteItem>();
             INITIAL_CURATED_QUOTES.forEach((cq) => map.set(cq.id, cq));
             prev.forEach((pq) => map.set(pq.id, pq));
-            cloudQuotes.forEach((cq) => map.set(cq.id, cq));
+            cloudQuotes.forEach((cq) => { if (!privateQuoteIdsRef.current.has(cq.id)) map.set(cq.id, cq); });
             const merged = Array.from(map.values());
-            saveLocalQuotes(merged);
+            saveDeviceCopy(() => saveLocalQuotes(merged, scopeRef.current));
             return merged;
           });
         }
@@ -234,10 +304,13 @@ export default function App() {
         console.warn('Firestore snapshot listener paused, using offline cache', error);
       });
 
-      return () => unsubscribe();
     } catch (e) {
       console.warn('Error setting up Firestore listener', e);
     }
+    }).catch((error) => {
+      console.warn('Community services could not load; device quotes remain available', { name: error instanceof Error ? error.name : 'Unknown error' });
+    });
+    return () => { disposed = true; unsubscribe(); };
   }, [isOnline]);
 
   // 5. 6-Hour Cycle Timer updater
@@ -262,10 +335,36 @@ export default function App() {
   }, []);
 
   // Update user preferences
+  const saveDeviceCopy = (write: () => void) => {
+    try {
+      write();
+      return true;
+    } catch (error) {
+      console.error('Device save failed', { name: error instanceof Error ? error.name : 'Unknown error' });
+      setAccountError('This device could not save your latest changes. Keep this page open, free up storage, and retry; download important writing before leaving.');
+      return false;
+    }
+  };
+  const queueMutations = (mutations: CloudMutation[]) => {
+    if (!scopeRef.current) return;
+    try {
+      if (!cloudRef.current) throw new Error('Cloud sync is not ready. Your device copy is retained; retry syncing before leaving.');
+      cloudRef.current.enqueueBatch(mutations);
+    } catch (error) {
+      console.error('Could not queue private changes', { name: error instanceof Error ? error.name : 'Unknown error' });
+      const message = error instanceof Error ? error.message : 'Cloud changes could not be queued. Keep this page open, check storage, and retry.';
+      setIsCloudSynced(false);
+      setSyncStatus((previous) => ({ ...previous, state: 'error', error: message }));
+      setCloudSyncError(message);
+      throw error;
+    }
+  };
+  const queueMutation = (mutation: CloudMutation) => queueMutations([mutation]);
   const handleUpdatePreferences = (newPrefs: Partial<UserPreferences>) => {
     const updated = { ...preferences, ...newPrefs };
     setPreferences(updated);
-    saveLocalPreferences(updated);
+    saveDeviceCopy(() => saveLocalPreferences(updated, scopeRef.current));
+    try { queueMutation({ kind: 'profile', preferences: newPrefs }); } catch { /* The sync error is displayed in the settings sheet. */ }
     if (newPrefs.fontChoice !== undefined) {
       const fontFamily = newPrefs.fontChoice;
       setStudioQuote((previous) => ({ ...previous, fontFamily }));
@@ -305,15 +404,17 @@ export default function App() {
     setAccountBusy(true);
     setAccountError('');
     try {
+      const { auth, signInWithPopup, googleProvider } = await getFirebaseClient();
       await signInWithPopup(auth, googleProvider);
       return true;
     } catch (err) {
-      console.warn('Google sign-in failed', err);
       const code = typeof err === 'object' && err !== null && 'code' in err ? err.code : '';
+      console.warn('Google sign-in failed', { code: typeof code === 'string' ? code : 'unknown' });
       const messages: Record<string, string> = {
-        'auth/popup-closed-by-user': 'Sign-in was canceled. Your local profile is unchanged.',
+        'auth/popup-closed-by-user': 'Google sign-in did not finish in this browser. Try again, or open Scriber directly in Chrome or Edge. Your local profile is unchanged.',
         'auth/cancelled-popup-request': 'Another sign-in window was opened. Please finish sign-in there or try again.',
-        'auth/popup-blocked': 'Your browser blocked Google sign-in. Allow pop-ups for Scriber and try again.',
+        'auth/popup-blocked': 'This browser blocked Google sign-in. Allow pop-ups for Scriber, or open Scriber directly in Chrome or Edge. Your local profile is unchanged.',
+        'auth/web-storage-unsupported': 'This browser cannot keep a Google sign-in session. Enable cookies and site storage, or use Chrome or Edge. Your local profile is unchanged.',
         'auth/network-request-failed': 'Google sign-in could not connect. Check your internet connection and try again.',
         'auth/unauthorized-domain': 'Google sign-in is not configured for this domain. The site owner must enable it in Firebase.',
         'auth/operation-not-allowed': 'Google sign-in is not enabled in Firebase yet.',
@@ -329,9 +430,8 @@ export default function App() {
     setAccountBusy(true);
     setAccountError('');
     try {
+      const { auth, signOut } = await getFirebaseClient();
       await signOut(auth);
-      setUser(null);
-      setLocalProfile(loadLocalProfile(null, 'Scriber Muse'));
       return true;
     } catch (err) {
       console.warn('Sign out error', err);
@@ -349,29 +449,14 @@ export default function App() {
 
     if (isCurrentlySaved) {
       nextSaved = savedIds.filter((id) => id !== quote.id);
-      if (user && isOnline) {
-        try {
-          await deleteDoc(doc(db, 'users', user.uid, 'saved_quotes', quote.id));
-        } catch (e) {
-          console.warn('Cloud delete failed', e);
-        }
-      }
     } else {
       nextSaved = [...savedIds, quote.id];
-      if (user && isOnline) {
-        try {
-          await setDoc(doc(db, 'users', user.uid, 'saved_quotes', quote.id), {
-            ...quote,
-            userId: user.uid,
-          });
-        } catch (e) {
-          console.warn('Cloud save failed', e);
-        }
-      }
+      privateQuoteIdsRef.current.add(quote.id);
     }
 
     setSavedIds(nextSaved);
-    saveSavedQuoteIds(nextSaved);
+    saveDeviceCopy(() => saveSavedQuoteIds(nextSaved, scopeRef.current));
+    try { queueMutation({ kind: 'saved', id: quote.id, value: isCurrentlySaved ? null : quote }); } catch { /* Device bookmarks remain available and the sync error is visible. */ }
   };
 
   // Toggle Like
@@ -379,32 +464,110 @@ export default function App() {
     const isLiked = likedIds.includes(quote.id);
     const nextLiked = isLiked ? likedIds.filter((id) => id !== quote.id) : [...likedIds, quote.id];
     setLikedIds(nextLiked);
-    saveLikedQuoteIds(nextLiked);
+    saveDeviceCopy(() => saveLikedQuoteIds(nextLiked, scopeRef.current));
 
     const delta = isLiked ? -1 : 1;
     setQuotes((prev) =>
       prev.map((q) => (q.id === quote.id ? { ...q, likesCount: Math.max(0, q.likesCount + delta) } : q))
     );
 
-    if (isOnline) {
+    if (isOnline && user && publicQuoteIdsRef.current.has(quote.id)) {
       try {
+        const [{ db }, { doc, updateDoc, increment }] = await Promise.all([getFirebaseClient(), import('firebase/firestore')]);
+        if (scopeRef.current !== user.uid) throw new Error('Your account changed while saving this like.');
         const quoteDocRef = doc(db, 'public_quotes', quote.id);
         await updateDoc(quoteDocRef, {
           likesCount: increment(delta),
         });
       } catch (err) {
-        // Document may not exist in Firestore yet if it was local only, set it
-        try {
-          await setDoc(doc(db, 'public_quotes', quote.id), {
-            ...quote,
-            likesCount: Math.max(0, quote.likesCount + delta),
-          });
-        } catch (e) {
-          console.warn('Like sync ignored in offline mode', e);
-        }
+        console.warn('Community like sync failed', err);
+        setAccountError('Your like was kept on this device, but could not sync to the community.');
       }
     }
   };
+
+  const handleBoxChange = (box: ManifestationState, owner: string | null) => {
+      if (scopeRef.current !== owner) {
+        setAccountError('Your account changed while writing. The previous draft was not applied to this account.');
+        return false;
+      }
+      const previous = manifestationRef.current;
+      const current = { ...box, error: '' };
+      manifestationRef.current = current;
+      setManifestation(current);
+      try {
+        const mutations: CloudMutation[] = [];
+        if (previous.draft !== box.draft) mutations.push({ kind: 'draft', value: box.draft });
+        const oldEntries = new Map(previous.entries.map((entry) => [entry.id, entry]));
+        const newEntries = new Set(box.entries.map((entry) => entry.id));
+        box.entries.forEach((entry) => {
+          if (JSON.stringify(oldEntries.get(entry.id)) !== JSON.stringify(entry)) mutations.push({ kind: 'manifestation', id: entry.id, value: entry });
+        });
+        previous.entries.forEach((entry) => {
+          if (!newEntries.has(entry.id)) mutations.push({ kind: 'manifestation', id: entry.id, value: null });
+        });
+        queueMutations(mutations);
+        saveManifestationState(owner, box);
+        cacheErrorsRef.current.box = '';
+        return true;
+      } catch (error) {
+        console.error('Manifestation persistence failed', { name: error instanceof Error ? error.name : 'Unknown error' });
+        setManifestation({ ...box, error: 'Your writing could not be fully saved or queued. Download it before leaving, check device storage, and retry.' });
+        return false;
+      }
+    };
+
+    const handleImportGuest = () => {
+      if (!user || scopeRef.current !== user.uid) {
+        setAccountError('Sign in before importing guest writing.');
+        return;
+      }
+      if (!hasHydratedRef.current) {
+        setAccountError('Wait for your account to sync before importing, so existing account writing is protected.');
+        return;
+      }
+      if (!window.confirm('Import guest saved quotes and manifestations into this account? Only import writing that belongs to you. Originals stay on this device. Your account draft is replaced only if it is empty.')) return;
+      try {
+        const guestBox = loadManifestationState(null);
+        if (guestBox.error) throw new Error(guestBox.error);
+        const guestIds = loadSavedQuoteIds(null, true);
+        if (!Array.isArray(guestIds) || !guestIds.every((id) => typeof id === 'string')) throw new Error('The guest bookmark list is invalid.');
+        const guestQuotes = new Map([...INITIAL_CURATED_QUOTES, ...publicQuotesRef.current, ...loadLocalQuotes(null)].map((quote) => [quote.id, quote]));
+        const importedQuotes = guestIds.map((id) => {
+          const quote = guestQuotes.get(id);
+          if (!quote) throw new Error('A guest bookmark has no saved quote text. Restore or remove it before importing.');
+          return quote;
+        });
+        const existing = manifestationRef.current;
+        const emptyDraft = ![existing.draft.intention, existing.draft.text, existing.draft.feeling, existing.draft.action].some((text) => text.trim());
+        const combinedEntries = new Map(guestBox.entries.map((entry) => [entry.id, entry]));
+        existing.entries.forEach((entry) => combinedEntries.set(entry.id, entry));
+        const guestMutations: CloudMutation[] = [
+          { kind: 'draft', value: emptyDraft ? guestBox.draft : existing.draft },
+          ...[...combinedEntries.values()].map((value): CloudMutation => ({ kind: 'manifestation', id: value.id, value })),
+          ...importedQuotes.map((value): CloudMutation => ({ kind: 'saved', id: value.id, value })),
+        ];
+        guestMutations.forEach(validateMutation);
+        if (!handleBoxChange({ draft: emptyDraft ? guestBox.draft : existing.draft, entries: [...combinedEntries.values()] }, user.uid)) {
+          throw new Error('The guest import could not be fully saved or queued. Originals are unchanged; check storage and retry.');
+        }
+        importedQuotes.forEach((quote) => queueMutation({ kind: 'saved', id: quote.id, value: quote }));
+        const ids = [...new Set([...savedIds, ...guestIds])];
+        setSavedIds(ids);
+        saveSavedQuoteIds(ids, user.uid);
+        setQuotes((previous) => {
+          const combined = new Map<string, QuoteItem>(previous.map((quote: QuoteItem) => [quote.id, quote]));
+          importedQuotes.forEach((quote) => { if (!combined.has(quote.id)) combined.set(quote.id, quote); });
+          const result = [...combined.values()];
+          saveDeviceCopy(() => saveLocalQuotes(result, user.uid));
+          return result;
+        });
+        setImportNotice('Guest writing and saved quotes imported into this account. Originals are unchanged; private cloud sync is queued.');
+      } catch (error) {
+        console.error('Guest import could not finish', { name: error instanceof Error ? error.name : 'Unknown error' });
+        setAccountError(error instanceof Error ? error.message : 'The import could not finish. Guest originals are unchanged; you can retry.');
+      }
+    };
 
   // Submit Feedback / Reflection
   const handleSubmitFeedback = async (quoteId: string, comment: string) => {
@@ -416,19 +579,21 @@ export default function App() {
       comment,
       createdAt: new Date().toISOString(),
     };
-
     const nextFeedbacks = {
       ...feedbacks,
       [quoteId]: [newFeedback, ...(feedbacks[quoteId] || [])],
     };
     setFeedbacks(nextFeedbacks);
-    saveLocalFeedbacks(nextFeedbacks);
+    saveDeviceCopy(() => saveLocalFeedbacks(nextFeedbacks, scopeRef.current));
 
-    if (isOnline && user) {
+    if (isOnline && user && publicQuoteIdsRef.current.has(quoteId)) {
       try {
+        const [{ db }, { doc, setDoc }] = await Promise.all([getFirebaseClient(), import('firebase/firestore')]);
+        if (scopeRef.current !== user.uid) throw new Error('Your account changed while sharing this reflection.');
         await setDoc(doc(db, 'public_quotes', quoteId, 'feedbacks', newFeedback.id), newFeedback);
       } catch (e) {
         console.warn('Could not sync feedback to cloud', e);
+        setAccountError('Your reflection was kept on this device, but could not sync to the community.');
       }
     }
   };
@@ -440,6 +605,7 @@ export default function App() {
     aestheticStyle?: AestheticStyle;
   }) => {
     const originalQuote = studioQuoteRef.current;
+    const requestScope = scopeRef.current;
     setIsGeneratingQuote(true);
     setGenerationError('');
     try {
@@ -447,9 +613,9 @@ export default function App() {
         userInput: params.userInput || '',
         category: params.category,
         aestheticStyle: params.aestheticStyle || 'earthy-minimal',
-        authorName: user?.displayName?.trim() || undefined,
+        authorName: user ? localProfile.profile.displayName : undefined,
       });
-      if (studioQuoteRef.current !== originalQuote) {
+      if (scopeRef.current !== requestScope || studioQuoteRef.current !== originalQuote) {
         throw new Error('Your quote changed while AI was writing. The response was not applied so your edits are preserved. Please try again.');
       }
       const { stylingNotes, ...quoteDetails } = generated;
@@ -463,19 +629,9 @@ export default function App() {
 
       setStudioQuote(newQuote);
       setQuotes((prev) => [newQuote, ...prev]);
-      saveLocalQuotes([newQuote, ...quotes]);
-
-      // If user is online, also publish to community quotes in Firestore
-      if (isOnline && user) {
-        try {
-          await setDoc(doc(db, 'public_quotes', newQuote.id), {
-            ...newQuote,
-            userId: user.uid,
-          });
-        } catch (e) {
-          console.warn('Quote saved locally, cloud sync will resume when connection is verified', e);
-        }
-      }
+      saveDeviceCopy(() => saveLocalQuotes([newQuote, ...quotes], scopeRef.current));
+      privateQuoteIdsRef.current.add(newQuote.id);
+      try { queueMutation({ kind: 'quote', id: newQuote.id, value: newQuote }); } catch { /* The generated quote is retained locally and the sync error is visible. */ }
       return true;
     } catch (err) {
       console.error('Quote generation failed', { message: err instanceof Error ? err.message : 'Unknown error' });
@@ -540,6 +696,7 @@ export default function App() {
     >
       {/* PWA Install Banner */}
       <PwaInstallBanner themeConfig={themeConfig} darkMode={darkMode} />
+      {usingFirebaseEmulators && <p role="status" className="px-4 py-2 text-xs bg-amber-100 text-amber-950 text-center">Local Firebase emulators: demo accounts and data only, not production cloud.</p>}
 
       {/* Main Navigation Bar */}
       <Navbar
@@ -557,20 +714,30 @@ export default function App() {
         themeConfig={themeConfig}
         trendingCountdown={countdownString}
         savedCount={savedIds.length}
-        accountBusy={accountBusy}
+        accountBusy={accountBusy || !authReady}
       />
 
       {/* Main Content Area */}
       <main aria-labelledby={`nav-tab-${activeTab}`} className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {user && <p role="status" aria-live="polite" className="mb-4 text-xs text-stone-600 dark:text-stone-300">{syncLabel}</p>}
+        {importNotice && <p role="status" className="mb-4 text-sm">{importNotice}</p>}
         {localProfile.error && <p role="alert" className="mb-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">{localProfile.error}</p>}
         {(accountError || cloudSyncError) && activeTab !== 'profile' && <p role="alert" className="mb-4 rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">{accountError || cloudSyncError}</p>}
+        <Suspense fallback={<p role="status" className="p-6 text-sm">Opening your sanctuary...</p>}>
         {activeTab === 'profile' && <ProfileTab key={user?.uid || 'guest'} user={user} profile={localProfile.profile}
-          onProfileSaved={(profile) => setLocalProfile({ profile, error: '' })}
-          accountError={accountError || cloudSyncError} accountBusy={accountBusy} onSignIn={handleSignIn} onSignOut={handleSignOut}
+          onProfileSaved={(profile) => {
+            if (scopeRef.current !== (user?.uid || null)) throw new Error('Your account changed. Please save in the current account.');
+            cacheErrorsRef.current.profile = '';
+            setLocalProfile({ profile, error: '' });
+            queueMutation({ kind: 'profile', profile });
+          }}
+          syncLabel={syncLabel} onSync={() => { void cloudRef.current?.sync(); }} onImportGuest={handleImportGuest}
+          accountError={accountError || cloudSyncError} accountBusy={accountBusy || !authReady} onSignIn={handleSignIn} onSignOut={handleSignOut}
           preferences={preferences} themeConfig={themeConfig} darkMode={darkMode} onToggleDarkMode={handleToggleDarkMode}
           onOpenThemeSettings={() => setIsThemeModalOpen(true)} onOpenAffirmationSettings={() => setIsAffirmationModalOpen(true)}
           onNavigate={setActiveTab} savedCount={savedIds.length} likedCount={likedIds.length} />}
-        {activeTab === 'manifest' && <ManifestationBox themeConfig={themeConfig} darkMode={darkMode} />}
+        {activeTab === 'manifest' && <ManifestationBox key={user?.uid || 'guest'} themeConfig={themeConfig} darkMode={darkMode}
+          box={manifestation} onChangeBox={(box) => handleBoxChange(box, user?.uid || null)} persistenceError={manifestation.error || cloudSyncError} syncLabel={syncLabel} />}
         
         {/* TAB 1: STUDIO */}
         {activeTab === 'studio' && (
@@ -587,6 +754,7 @@ export default function App() {
             />
 
             {/* Interactive Studio Workspace */}
+            <Suspense fallback={<p role="status" className="p-6 text-sm">Opening your quote studio...</p>}>
             <QuoteStudio
               currentQuote={studioQuote}
               onChangeQuote={setStudioQuote}
@@ -598,6 +766,7 @@ export default function App() {
               themeConfig={themeConfig}
               darkMode={darkMode}
             />
+            </Suspense>
           </div>
         )}
 
@@ -756,11 +925,7 @@ export default function App() {
                     onToggleSave={handleToggleSave}
                     onToggleLike={handleToggleLike}
                     onOpenFeedback={(q) => setActiveFeedbackQuote(q)}
-                    onDeleteFromSaved={(id) => {
-                      const next = savedIds.filter((savedId) => savedId !== id);
-                      setSavedIds(next);
-                      saveSavedQuoteIds(next);
-                    }}
+                    onDeleteFromSaved={() => { void handleToggleSave(quote); }}
                     onSelectForStudio={(q) => {
                       setStudioQuote(q);
                       setActiveTab('studio');
@@ -894,6 +1059,7 @@ export default function App() {
           </div>
         )}
 
+        </Suspense>
       </main>
 
       {/* Footer */}
@@ -922,7 +1088,8 @@ export default function App() {
       </footer>
 
       {/* Modals */}
-      <ThemeCustomizerModal
+      <Suspense fallback={<p role="status" className="fixed bottom-24 inset-x-4 rounded-xl p-3 bg-white text-stone-900 border z-50">Opening settings...</p>}>
+      {isThemeModalOpen && <ThemeCustomizerModal
         isOpen={isThemeModalOpen}
         onClose={() => setIsThemeModalOpen(false)}
         preferences={preferences}
@@ -930,18 +1097,19 @@ export default function App() {
         themeConfig={themeConfig}
         darkMode={darkMode}
         onRequestNotificationPermission={handleRequestNotificationPermission}
-      />
+        persistenceError={accountError || cloudSyncError}
+      />}
 
-      <DailyAffirmationModal
+      {isAffirmationModalOpen && <DailyAffirmationModal
         isOpen={isAffirmationModalOpen}
         onClose={() => setIsAffirmationModalOpen(false)}
         onRequestNotificationPermission={handleRequestNotificationPermission}
         notificationsEnabled={preferences.dailyNotificationEnabled}
         themeConfig={themeConfig}
         darkMode={darkMode}
-      />
+      />}
 
-      <FeedbackModal
+      {activeFeedbackQuote && <FeedbackModal
         quote={activeFeedbackQuote}
         isOpen={!!activeFeedbackQuote}
         onClose={() => setActiveFeedbackQuote(null)}
@@ -950,7 +1118,8 @@ export default function App() {
         userName={user?.displayName || 'Kind Soul'}
         themeConfig={themeConfig}
         darkMode={darkMode}
-      />
+      />}
+      </Suspense>
 
     </div>
   );

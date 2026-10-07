@@ -1,11 +1,10 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { 
-  getFirestore, 
   initializeFirestore, 
+  getFirestore,
   persistentLocalCache, 
   persistentMultipleTabManager,
-  doc, 
-  getDocFromServer 
+  connectFirestoreEmulator
 } from 'firebase/firestore';
 import { 
   getAuth, 
@@ -14,10 +13,13 @@ import {
   signInAnonymously, 
   signOut, 
   onAuthStateChanged, 
+  connectAuthEmulator,
   type User 
 } from 'firebase/auth';
 import firebaseConfigData from '../../firebase-applet-config.json';
+import { usingFirebaseEmulators } from './firebaseEnvironment';
 
+export { usingFirebaseEmulators } from './firebaseEnvironment';
 const firebaseConfig = {
   apiKey: firebaseConfigData.apiKey,
   authDomain: firebaseConfigData.authDomain,
@@ -25,31 +27,25 @@ const firebaseConfig = {
   storageBucket: firebaseConfigData.storageBucket,
   messagingSenderId: firebaseConfigData.messagingSenderId,
   appId: firebaseConfigData.appId,
+  ...(usingFirebaseEmulators ? { projectId: 'demo-scriber', apiKey: 'demo-scriber-key', authDomain: 'demo-scriber.firebaseapp.com' } : {}),
 };
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const alreadyInitialized = getApps().length > 0;
+const app = alreadyInitialized ? getApp() : initializeApp(firebaseConfig);
+const databaseId = usingFirebaseEmulators ? '(default)' : firebaseConfigData.firestoreDatabaseId || '(default)';
 
 // Initialize Firestore with offline persistence support and designated databaseId
-export const db = initializeFirestore(app, {
+export const db = alreadyInitialized ? getFirestore(app, databaseId) : initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager()
   })
-}, firebaseConfigData.firestoreDatabaseId || '(default)');
+}, databaseId);
 
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
-
-// Connection health check mandated by firebase-skill
-export async function testFirestoreConnection(): Promise<boolean> {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase client is offline, using cached local data.');
-    }
-    return false;
-  }
+if (usingFirebaseEmulators) {
+  if (!auth.emulatorConfig) connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
+  if (!alreadyInitialized) connectFirestoreEmulator(db, '127.0.0.1', 8080);
 }
 
 export { 

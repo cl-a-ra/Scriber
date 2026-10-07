@@ -4,11 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev": "vite --host=0.0.0.0",
     "build": "vite build && npm run build:server",
     "build:server": "esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=build/server.js",
     "start": "node build/server.js",
     "test": "node --import tsx --test src/server/*.test.ts src/lib/*.test.ts",
+    "test:firebase": "firebase emulators:exec --config firebase.emulators.json --only auth,firestore --project demo-scriber \"node --import tsx --test src/firebase/*.test.ts\"",
+    "emulators": "firebase emulators:start --config firebase.emulators.json --only auth,firestore --project demo-scriber",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
@@ -29,6 +31,8 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
+    "firebase-tools": "^15.0.0",
     "@types/canvas-confetti": "^1.9.0",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",

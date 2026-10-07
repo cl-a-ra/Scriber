@@ -13,6 +13,7 @@ interface ThemeCustomizerModalProps {
   themeConfig: ThemeConfig;
   darkMode: boolean;
   onRequestNotificationPermission: () => Promise<void>;
+  persistenceError?: string;
 }
 
 export const ThemeCustomizerModal: React.FC<ThemeCustomizerModalProps> = ({
@@ -23,6 +24,7 @@ export const ThemeCustomizerModal: React.FC<ThemeCustomizerModalProps> = ({
   themeConfig,
   darkMode,
   onRequestNotificationPermission,
+  persistenceError,
 }) => {
   if (!isOpen) return null;
 
@@ -51,6 +53,7 @@ export const ThemeCustomizerModal: React.FC<ThemeCustomizerModalProps> = ({
           color: darkMode ? themeConfig.textDark : themeConfig.textLight,
         }}
       >
+        {persistenceError && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">{persistenceError}</p>}
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b"
           style={{ borderColor: darkMode ? themeConfig.borderDark : themeConfig.borderLight }}

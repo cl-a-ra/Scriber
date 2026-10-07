@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import { createApiApp } from './app';
 import { ApiError } from './apiError';
 import { createAIService, type AIService } from './geminiService';
@@ -198,4 +198,41 @@ test('API rejects malformed JSON, non-JSON bodies, oversized bodies, and unknown
     assert.equal(missing.status, 404);
     assert.equal((await missing.json()).code, 'NOT_FOUND');
   });
+});
+
+test('default and overridden Flash models report unavailable and busy provider errors explicitly', async () => {
+  const previousKey = process.env.GEMINI_API_KEY;
+  const previousModel = process.env.GEMINI_MODEL;
+  process.env.GEMINI_API_KEY = 'test-key-not-real';
+  delete process.env.GEMINI_MODEL;
+  let requestedUrl = '';
+  let providerStatus = 404;
+  const fetchMock = mock.method(globalThis, 'fetch', async (input: Parameters<typeof fetch>[0]) => {
+    requestedUrl = input instanceof Request ? input.url : String(input);
+    return new Response(JSON.stringify({
+      error: {
+        code: providerStatus,
+        status: providerStatus === 404 ? 'NOT_FOUND' : 'UNAVAILABLE',
+        message: providerStatus === 404 ? 'This model is unavailable for this account.' : 'This model is experiencing high demand.',
+      },
+    }), { status: providerStatus, headers: { 'Content-Type': 'application/json' } });
+  });
+  try {
+    await assert.rejects(createAIService().generateQuote(parseQuoteRequest(quoteInput)), {
+      status: 503, code: 'AI_MODEL_UNAVAILABLE',
+    });
+    assert.match(requestedUrl, /\/models\/gemini-3\.8-flash:generateContent/);
+    providerStatus = 503;
+    process.env.GEMINI_MODEL = 'gemini-3.1-flash-lite';
+    await assert.rejects(createAIService().generateQuote(parseQuoteRequest(quoteInput)), {
+      status: 503, code: 'AI_BUSY',
+    });
+    assert.match(requestedUrl, /\/models\/gemini-3\.1-flash-lite:generateContent/);
+  } finally {
+    fetchMock.mock.restore();
+    if (previousKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = previousKey;
+    if (previousModel === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = previousModel;
+  }
 });

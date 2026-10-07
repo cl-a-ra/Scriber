@@ -91,8 +91,20 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('/node_modules/@firebase/firestore/') || id.includes('/node_modules/firebase/firestore/')) return 'firebase-firestore';
+            if (id.includes('/node_modules/@firebase/webchannel-wrapper/')) return 'firebase-transport';
+            if (id.includes('/node_modules/@firebase/') || id.includes('/node_modules/firebase/')) return 'firebase-core';
+          },
+        },
+      },
+    },
     server: {
-      port: 3000,
+      port: 3010,
+      strictPort: true,
       host: '0.0.0.0',
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
