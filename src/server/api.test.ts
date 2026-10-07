@@ -237,9 +237,9 @@ test('default and overridden Flash models report unavailable and busy provider e
   }
 });
 
-test('two trusted proxy hops count the client consistently and ignore spoofed prefixes', async () => {
+test('three trusted proxy hops count the client consistently and ignore spoofed prefixes', async () => {
   const previousProxyHops = process.env.TRUST_PROXY_HOPS;
-  process.env.TRUST_PROXY_HOPS = '2';
+  process.env.TRUST_PROXY_HOPS = '3';
   try {
     await withApi(async (base) => {
       const send = (forwardedFor: string) => fetch(`${base}/generate-quote`, {
@@ -247,11 +247,11 @@ test('two trusted proxy hops count the client consistently and ignore spoofed pr
         headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': forwardedFor },
         body: JSON.stringify(quoteInput),
       });
-      assert.equal((await send('203.0.113.4, 198.51.100.1')).status, 200);
-      const limited = await send('192.0.2.30, 203.0.113.4, 198.51.100.2');
+      assert.equal((await send('203.0.113.4, 198.51.100.1, 198.51.100.3')).status, 200);
+      const limited = await send('192.0.2.30, 203.0.113.4, 198.51.100.2, 198.51.100.4');
       assert.equal(limited.status, 429);
       assert.equal((await limited.json()).code, 'RATE_LIMITED');
-      assert.equal((await send('192.0.2.31, 203.0.113.6, 198.51.100.2')).status, 200);
+      assert.equal((await send('192.0.2.31, 203.0.113.6, 198.51.100.2, 198.51.100.4')).status, 200);
     }, createAIService(async () => quote), 1);
   } finally {
     if (previousProxyHops === undefined) delete process.env.TRUST_PROXY_HOPS;

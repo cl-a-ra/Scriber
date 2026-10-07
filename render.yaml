@@ -14,7 +14,7 @@ services:
       - key: HOST
         value: "0.0.0.0"
       - key: TRUST_PROXY_HOPS
-        value: "2"
+        value: "3"
       - key: GEMINI_MODEL
         value: gemini-3.1-flash-lite
       - key: GEMINI_API_KEY

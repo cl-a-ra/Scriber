@@ -1,5 +1,4 @@
 import express, { type ErrorRequestHandler } from 'express';
-import { createHash } from 'node:crypto';
 import { ApiError } from './apiError';
 import { createApiRouter, type ApiRouterOptions } from './apiRouter';
 
@@ -11,20 +10,6 @@ export function createApiApp(options: ApiRouterOptions = {}) {
     if (!/^[0-5]$/.test(proxyHops)) throw new Error('TRUST_PROXY_HOPS must be an integer between 0 and 5.');
     app.set('trust proxy', Number(proxyHops));
   }
-  app.get('/api/health', (req, _res, next) => {
-    const nonce = process.env.PROXY_DIAGNOSTIC_NONCE;
-    if (nonce && req.get('x-scriber-proxy-probe') === nonce) {
-      const fingerprint = (value: string | undefined) => value
-        ? createHash('sha256').update(value.trim()).digest('hex').slice(0, 12) : null;
-      console.info('Scriber proxy probe', {
-        client: fingerprint(req.ip),
-        socket: fingerprint(req.socket.remoteAddress),
-        forwarded: req.get('x-forwarded-for')?.split(',').map(fingerprint),
-        cloudflare: fingerprint(req.get('cf-connecting-ip')),
-      });
-    }
-    next();
-  });
   app.use('/api', (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
   app.use('/api', express.json({ limit: '32kb' }), createApiRouter(options));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'API endpoint not found.', code: 'NOT_FOUND' }));
