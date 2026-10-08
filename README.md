@@ -6,7 +6,7 @@ A quote studio and personal manifestation writing app built with React, TypeScri
 
 - Repository: [cl-a-ra/Scriber](https://github.com/cl-a-ra/Scriber)
 - Local app: [http://localhost:3010](http://localhost:3010) after starting the development server.
-- Hosted app: use the public URL shown on the Scriber web service in the [Render dashboard](https://dashboard.render.com/). The service name alone does not determine its assigned hostname.
+- Hosted app: [https://scriber-2kre.onrender.com](https://scriber-2kre.onrender.com).
 
 ## Features
 
